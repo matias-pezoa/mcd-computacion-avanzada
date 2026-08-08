@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Matías Pezoa — Computación Avanzada</title>
+  <meta name="description" content="Perfil de Matías Pezoa para el curso Computación Avanzada 2026.">
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
+</head>
+<body>
+  <div class="aurora" aria-hidden="true">
+    <span></span>
+    <span></span>
+    <span></span>
+  </div>
+
+  <main class="page">
+    <header class="hero">
+      <p class="eyebrow">Computación Avanzada 2026</p>
+      <h1>Matías Pezoa</h1>
+      <p class="lead">Diseño Industrial + Magíster en Ciencias del Diseño.</p>
+    </header>
+
+    <section class="card">
+      <h2>Perfil</h2>
+      <dl>
+        <dt>Qué hago hoy</dt>
+        <dd>Trabajo como diseñador y docente universitario, especializado en la intersección entre moda, tecnología y fabricación digital. Desarrollo proyectos que integran diseño, procesos de fabricación y herramientas computacionales aplicadas al cuerpo y al vestuario.</dd>
+        <dt>Qué me gustaría aprender en este curso</dt>
+        <dd>Cómo utilizar sistemas digitales y computacionales para expandir los procesos de diseño de moda, conectando cuerpo, geometría, materialidad, fabricación e interacción.</dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Intereses</h2>
+      <ul class="tags">
+        <li>Diseño computacional</li>
+        <li>Moda y tecnología</li>
+        <li>Fabricación digital</li>
+        <li>Diseño paramétrico</li>
+        <li>Wearables e interacción</li>
+        <li>Materiales y experimentación</li>
+        <li>Inteligencia artificial aplicada al diseño</li>
+      </ul>
+    </section>
+
+    <section class="card">
+      <h2>Una pregunta que me interesa explorar</h2>
+      <p class="pull">¿Cómo puede el diseño computacional transformar la relación entre cuerpo, material y fabricación para generar nuevas formas de diseñar y producir indumentaria?</p>
+    </section>
+
+    <section class="card">
+      <h2>Algo que me inspira</h2>
+      <p>Los proyectos donde la tecnología no funciona únicamente como una herramienta para fabricar una forma previamente diseñada, sino como parte activa del proceso de diseño, permitiendo que el cuerpo, los materiales, los datos y los sistemas de fabricación participen en la generación del resultado.</p>
+      <figure class="media">
+        <img src="assets/images/Hungry.jpg" alt="Imagen de referencia del proceso de diseño de Matías Pezoa" loading="lazy">
+      </figure>
+    </section>
+
+    <section class="card">
+      <h2>Modelo 3D</h2>
+      <div class="media">
+        <model-viewer
+          class="model"
+          src="assets/models/ESPIRAL.glb"
+          alt="Modelo 3D ESPIRAL de Matías Pezoa"
+          camera-controls
+          touch-action="pan-y"
+          auto-rotate
+          shadow-intensity="1"
+          exposure="1">
+        </model-viewer>
+      </div>
+      <p class="caption">Arrastra para orbitar · ESPIRAL.glb</p>
+    </section>
+
+    <section class="card">
+      <h2>Links</h2>
+      <ul class="links">
+        <li><a href="https://www.linkedin.com/in/matias-pezoa-a1532b12a/" rel="noopener">LinkedIn <span aria-hidden="true">→</span></a></li>
+        <li><a href="https://www.instagram.com/m4.t1" rel="noopener">Instagram <span aria-hidden="true">→</span></a></li>
+      </ul>
+    </section>
+  </main>
+
+  <script>
+    document.querySelectorAll('.card').forEach(function (card) {
+      card.addEventListener('pointermove', function (e) {
+        var r = card.getBoundingClientRect();
+        card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
+        card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+      });
+    });
+  </script>
+</body>
+</html>
