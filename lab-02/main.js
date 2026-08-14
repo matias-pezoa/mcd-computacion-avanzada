@@ -111,7 +111,7 @@ function calcularAlturaModulo(x, z) {
   const distancia = Math.sqrt(x * x + z * z);
 
   const onda =
-    Math.cos(distancia * parametros.frecuencia) *
+    Math.sin(distancia * parametros.frecuencia) *
     parametros.amplitud;
 
   const ruido =
