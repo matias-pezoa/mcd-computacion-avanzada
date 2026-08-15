@@ -1,5 +1,5 @@
 # Matías Pezoa
-
+![PERFIL](../assets/images/PERFIL.jpg)
 ## Perfil
 
 **Disciplina / formación:** Diseño Industrial + Magíster en Ciencias del Diseño.
@@ -28,7 +28,6 @@ Intereses
 Los proyectos donde la tecnología no funciona únicamente como una herramienta para fabricar una forma previamente diseñada, sino como parte activa del proceso de diseño, permitiendo que el cuerpo, los materiales, los datos y los sistemas de fabricación participen en la generación del resultado.
 
 ![Hungry](../assets/images/Hungry.jpg)
-
 
 ## Links
 
