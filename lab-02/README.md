@@ -1,34 +1,45 @@
-# Campo Generativo 01
+# Real—Real Field
 
-Guía para **Clase 02 — Computación Avanzada**  
+Guía para **Clase 02 — Computación Avanzada**
 Magíster en Ciencias del Diseño · Universidad Adolfo Ibáñez
 
 ## Objetivo
 
-> **Diseñar un sistema no significa dibujar una única forma. Significa definir las reglas que producen un espacio de posibilidades.**
+> **Una imagen no es solo su forma: es un conjunto de datos que se puede fragmentar, distorsionar y hacer reaccionar.**
 
-Este starter genera un campo tridimensional de módulos mediante reglas simples.
+Este proyecto convierte una imagen — subida como archivo o tomada en vivo
+con la cámara — en un campo de partículas, un punto por píxel muestreado,
+cuyo color viene del contenido real de la imagen. Un conjunto de reglas de
+distorsión y glitch (referenciando la estética del póster *REAL—Real City*,
+Arko Art Center) altera esa lectura, y el micrófono dispersa las partículas
+en tiempo real según el volumen.
 
 ## Parámetros
 
-### Sistema
-- Columnas
-- Filas
-- Separación
+### Imagen
+- Subir imagen
+- Usar cámara (tiempo real): mientras está activa, el campo se regenera
+  ~15 veces por segundo desde el video en vivo; "Detener cámara" congela
+  el último frame como imagen fija
+- Resolución (densidad de muestreo — limitada automáticamente a 180 en
+  modo cámara para mantener la fluidez)
+- Tamaño de partícula
+- Profundidad (relieve por brillo)
 
-### Comportamiento
-- Amplitud
-- Frecuencia
-- Rotación
+### Distorsión
+- Especularidad (brillo extra en las zonas más claras)
+- Cantidad de distorsión (ruido orgánico, no una onda regular)
+- Nivel de glitch (bandas desplazadas + separación de canal RGB)
+- Nuevo glitch (nueva semilla aleatoria para el patrón de glitch)
 
-### Variación
-- Aleatoriedad
-- Semilla
+### Audio
+- Activar micrófono
+- Sensibilidad (cuánto dispersa el volumen a las partículas)
 
 ## Estructura
 
 ```text
-campo-generativo-guia/
+lab-02/
 ├── README.md
 ├── index.html
 ├── style.css
@@ -39,7 +50,8 @@ campo-generativo-guia/
 
 ## Cómo ejecutarlo
 
-Este proyecto utiliza módulos JavaScript, por lo que debe abrirse mediante un servidor local.
+Este proyecto utiliza módulos JavaScript y `getUserMedia` (micrófono), por lo
+que **debe** abrirse mediante un servidor local — `file://` no funciona.
 
 ### Opción recomendada — VS Code + Live Server
 
@@ -47,88 +59,72 @@ Este proyecto utiliza módulos JavaScript, por lo que debe abrirse mediante un s
 2. Instala la extensión **Live Server**.
 3. Haz click derecho sobre `index.html`.
 4. Selecciona **Open with Live Server**.
+5. Sube una imagen desde el panel lateral.
 
 ## Qué mirar en `main.js`
 
 ```text
 01 — PARÁMETROS
 02 — ESCENA
-03 — OBJETO GENERATIVO
-04 — REGLAS GENERATIVAS
-05 — GENERAR CAMPO
-06 — ALEATORIEDAD CONTROLADA
-07 — INTERFAZ
-08 — BUCLE DE ANIMACIÓN
+03 — SISTEMA DE PARTÍCULAS
+04 — CARGA Y MUESTREO DE IMAGEN
+05 — REGLAS GENERATIVAS
+06 — GENERAR CAMPO
+07 — ALEATORIEDAD CONTROLADA
+08 — AUDIO: MOVIMIENTO Y DECIBELES
+09 — PALETA CROMÁTICA
+10 — INTERFAZ
+11 — BUCLE DE ANIMACIÓN
 ```
 
-Para LAB02 concéntrate inicialmente en:
+Las decisiones de diseño están en la sección 05:
 
 ```js
-function calcularAlturaModulo(x, z)
+function generarDesplazamientosGlitch(filas)                          // Regla A — glitch por bandas
+function calcularColorParticula(col, fila, desplazamientoFila)        // Regla B — color + especularidad
+function calcularProfundidadYDistorsion(px, py, brillo)               // Regla C — relieve + distorsión
 ```
-
-y:
-
-```js
-function calcularRotacionModulo(x, z)
-```
-
-Estas dos funciones representan **decisiones de diseño**.
 
 ## Primeros experimentos
 
-### 1 — Cambia la amplitud
+### 1 — Sube una imagen y solo mira
 
-```js
-amplitud: 5.0
-```
+Con "Nivel de glitch" y "Cantidad de distorsión" en 0, la imagen debería
+leerse casi tal cual, solo como una nube de puntos de colores reales.
 
-### 2 — Cambia la frecuencia
+### 2 — Sube el glitch al máximo
 
-```js
-frecuencia: 0.15
-```
+`glitch: 1` hace que casi todas las filas se desplacen — compara el
+resultado con el póster de referencia (*REAL—Real City*, Arko Art Center,
+2019): bandas de color cortadas y corridas, canales RGB separados.
 
-### 3 — Cambia la regla
+### 3 — Conecta el micrófono y habla o pon música
 
-Dentro de `calcularAlturaModulo()`, reemplaza:
+En silencio la imagen se mantiene nítida; con volumen alto se dispersa en
+ruido. El HUD arriba a la derecha muestra el nivel en dB en tiempo real.
 
-```js
-Math.sin(distancia * parametros.frecuencia)
-```
+### 4 — Cambia la regla de color
 
-por:
+Dentro de `calcularColorParticula()`, el boost de especularidad es
+`1 + parametros.especularidad * brillo * brillo`. Prueba con `brillo`
+sin elevar al cuadrado, o invirtiendo qué zonas brillan (`1 - brillo`).
 
-```js
-Math.cos(distancia * parametros.frecuencia)
-```
+## Datos en pantalla (HUD)
 
-### 4 — Haz que la altura dependa de X
+El overlay sobre el canvas (tipografía monoespaciada, JetBrains Mono) muestra:
 
-```js
-const onda =
-  Math.sin(x * parametros.frecuencia) *
-  parametros.amplitud;
-```
-
-### 5 — Prueba aleatoriedad + semilla
-
-La misma **semilla** produce siempre la misma variación.
+- **Autor / curso / universidad** — editables directamente en `index.html`
+  (`#hud-autor`, `#hud-curso`, `#hud-universidad`).
+- **Nivel de audio** en dB — lectura RMS en tiempo real del micrófono
+  (aproximación dBFS, no es un dB SPL calibrado).
+- **Paleta cromática** — 5 colores promediados de franjas verticales de la
+  imagen, con su código hexadecimal.
 
 ## GitHub Pages
 
-El proyecto usa rutas relativas y puede publicarse directamente en GitHub Pages.
-
-## Extensión opcional — Rhino → GLB
-
-La carpeta:
-
-```text
-assets/models/
-```
-
-queda preparada para una etapa posterior donde `BoxGeometry` podrá reemplazarse por una geometría propia exportada desde Rhino como `.glb`.
+El proyecto usa rutas relativas y puede publicarse directamente en GitHub
+Pages. El micrófono funcionará porque GitHub Pages sirve por `https://`.
 
 ## Pregunta guía
 
-> **¿Qué cambia cuando dejamos de diseñar una forma y comenzamos a diseñar las reglas que producen formas?**
+> **¿Qué tan "real" es una imagen cuando se fragmenta en datos que el sonido puede dispersar?**

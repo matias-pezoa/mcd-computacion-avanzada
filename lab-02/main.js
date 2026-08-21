@@ -6,25 +6,18 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 // ======================================================
 
 const valoresIniciales = {
-  columnas: 15,
-  filas: 15,
-  separacion: 1.2,
-  amplitud: 5.0,
-  frecuencia: 0.15,
-  rotacion: 0.3,
-  aleatoriedad: 0.0,
-  semilla: 42,
-  atractorActivo: false,
-  atractorFuerza: 3.0,
-  atractorRadio: 6.0,
-  atractorFrecuencia: 0.6,
-  atractorX: 0,
-  atractorZ: 0,
-  microfonoActivo: false,
-  microfonoFuerza: 2.0,
+  resolucion: 300,
+  tamanioParticula: 0.035,
+  profundidad: 2.5,
+  especularidad: 0.6,
+  saturacion: 1.0,
+  coloresPersonalizadosActivo: false,
+  distorsion: 0.3,
+  glitch: 0.35,
+  audioActivo: false,
+  audioFuerza: 3.0,
+  glitchSemilla: 7, // no tiene slider propio: cambia con el botón "Nuevo glitch"
 };
-
-const colorAtractorInicial = "#ff5a3c";
 
 const parametros = { ...valoresIniciales };
 
@@ -35,7 +28,7 @@ const parametros = { ...valoresIniciales };
 const viewport = document.querySelector("#viewport");
 
 const escena = new THREE.Scene();
-escena.background = new THREE.Color(0x0b0b0c);
+escena.background = new THREE.Color(0x000000);
 
 const camara = new THREE.PerspectiveCamera(
   42,
@@ -44,217 +37,500 @@ const camara = new THREE.PerspectiveCamera(
   200
 );
 
-camara.position.set(18, 16, 18);
+camara.position.set(0, 0, 16);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(viewport.clientWidth, viewport.clientHeight);
-renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 viewport.appendChild(renderer.domElement);
 
 const controlesOrbita = new OrbitControls(camara, renderer.domElement);
 controlesOrbita.enableDamping = true;
-controlesOrbita.target.set(0, 1.2, 0);
+controlesOrbita.target.set(0, 0, 0);
 
-// Iluminación general.
-const luzHemisferica = new THREE.HemisphereLight(0xf3efe5, 0x202229, 1.7);
-escena.add(luzHemisferica);
+// No hay luces: las partículas se dibujan con su propio color (no lit),
+// igual que un póster impreso — el "relieve" se lee por el desplazamiento
+// en Z, no por sombreado.
 
-// Luz principal.
-const luzPrincipal = new THREE.DirectionalLight(0xffffff, 3.1);
-luzPrincipal.position.set(8, 14, 9);
-luzPrincipal.castShadow = true;
-escena.add(luzPrincipal);
+// ======================================================
+// 03 — SISTEMA DE PARTÍCULAS
+// ======================================================
+// Un punto por píxel muestreado de la imagen. Los buffers se reservan una
+// sola vez a capacidad máxima (resolución máx. al cuadrado) para no pedir
+// memoria nueva a la GPU cada vez que se mueve un slider — solo se dibuja
+// el tramo [0, totalParticulasActivas) mediante setDrawRange.
 
-// Luz secundaria para suavizar el contraste.
-const luzRelleno = new THREE.DirectionalLight(0xc8d8ff, 0.8);
-luzRelleno.position.set(-8, 6, -6);
-escena.add(luzRelleno);
+// resolución máxima (700) al cuadrado. No se sube más: 5000×5000 serían 25
+// millones de partículas — más de lo que un tab de navegador puede animar
+// en tiempo real (el bucle de audio, sección 08, recorre todas cada frame).
+// 700×700 = 490.000 partículas ya es un techo exigente para 60fps estables.
+const CAPACIDAD_MAXIMA_PARTICULAS = 500000;
 
-// Plano base.
-const suelo = new THREE.Mesh(
-  new THREE.PlaneGeometry(60, 60),
-  new THREE.MeshStandardMaterial({
-    color: 0x101114,
-    roughness: 1,
-    metalness: 0,
-  })
+const geometriaParticulas = new THREE.BufferGeometry();
+
+geometriaParticulas.setAttribute(
+  "position",
+  new THREE.BufferAttribute(new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS * 3), 3)
 );
+geometriaParticulas.setAttribute(
+  "color",
+  new THREE.BufferAttribute(new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS * 3), 3)
+);
+geometriaParticulas.setDrawRange(0, 0);
 
-suelo.rotation.x = -Math.PI / 2;
-suelo.position.y = -0.03;
-suelo.receiveShadow = true;
-escena.add(suelo);
+let totalParticulasActivas = 0;
 
-// Grilla de referencia para leer mejor escala y posición.
-const grilla = new THREE.GridHelper(50, 50, 0x35383d, 0x202227);
-grilla.position.y = 0.001;
-escena.add(grilla);
+// Posición de reposo (tras distorsión + glitch) y dirección/fase propia
+// de cada partícula: el audio la desplaza a partir de estos valores.
+const particulasBaseX = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasBaseY = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasBaseZ = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasJitterX = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasJitterY = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasJitterZ = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
+const particulasFase = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
 
-// ======================================================
-// 03 — OBJETO GENERATIVO
-// ======================================================
+// Qué tan lejos del punto medio de brillo está cada partícula (0..1):
+// las zonas más claras u oscuras tienen más relieve y, por lo tanto,
+// más rango de movimiento cuando reacciona al audio.
+const particulasProfundidad = new Float32Array(CAPACIDAD_MAXIMA_PARTICULAS);
 
-const grupoCampo = new THREE.Group();
-escena.add(grupoCampo);
-
-const geometriaModulo = new THREE.SphereGeometry(0.5, 20, 14);
-
-const materialModulo = new THREE.MeshStandardMaterial({
-  color: 0xd7d2c8,
-  roughness: 0.58,
-  metalness: 0.03,
+// Sin textura: puntos cuadrados y opacos, con test/escritura de profundidad
+// real, para que se oculten entre sí como vóxeles — no como una nube de
+// luces translúcidas.
+const materialParticulas = new THREE.PointsMaterial({
+  size: parametros.tamanioParticula,
+  vertexColors: true,
+  transparent: false,
+  depthWrite: true,
+  depthTest: true,
 });
 
-// Color que tiñe los módulos dentro del radio de influencia del atractor.
-let colorAtractor = new THREE.Color(colorAtractorInicial);
+const particulas = new THREE.Points(geometriaParticulas, materialParticulas);
+escena.add(particulas);
 
-// Marcador visual de la posición del punto atractor.
-const marcadorAtractor = new THREE.Mesh(
-  new THREE.SphereGeometry(0.35, 20, 20),
-  new THREE.MeshStandardMaterial({
-    color: colorAtractor,
-    emissive: colorAtractor,
-    emissiveIntensity: 0.6,
-    roughness: 0.3,
-  })
-);
-marcadorAtractor.position.set(0, 0.35, 0);
-marcadorAtractor.visible = false;
-escena.add(marcadorAtractor);
+// Objetos reutilizados en calcularColorParticula() para no crear uno nuevo
+// por cada una de las (hasta 500.000) partículas en cada regeneración.
+const colorEscratch = new THREE.Color();
+const hslEscratch = { h: 0, s: 0, l: 0 };
 
-function actualizarMarcadorAtractor() {
-  marcadorAtractor.visible = parametros.atractorActivo;
-  marcadorAtractor.position.set(parametros.atractorX, 0.35, parametros.atractorZ);
-  marcadorAtractor.material.color.copy(colorAtractor);
-  marcadorAtractor.material.emissive.copy(colorAtractor);
+// Paleta de hasta 4 colores personalizados (modo "Colores personalizados"):
+// reemplazan el color real de la imagen por un degradado propio, mapeado
+// según el brillo de cada píxel.
+const coloresPersonalizadosInicial = ["#1a1a2e", "#e94560", "#f5b642", "#f6f1e7"];
+const coloresPersonalizados = coloresPersonalizadosInicial.map((hex) => new THREE.Color(hex));
+
+// ======================================================
+// 04 — CARGA Y MUESTREO DE IMAGEN
+// ======================================================
+// La imagen se dibuja reducida sobre un canvas en memoria: el tamaño de
+// destino (columnasImagen × filasImagen) fija cuántos píxeles se leen,
+// es decir, la densidad de partículas.
+
+const lienzoMuestreo = document.createElement("canvas");
+const contextoMuestreo = lienzoMuestreo.getContext("2d", { willReadFrequently: true });
+
+let imagenActual = null;
+let datosImagenActual = null;
+let columnasImagen = 0;
+let filasImagen = 0;
+let paletaActual = [];
+
+// espejo=true invierte horizontalmente (la cámara frontal se ve mejor en
+// espejo, como un espejo real); las imágenes subidas nunca lo usan.
+function muestrearFuente(fuente, ancho, alto, resolucion, espejo = false) {
+  const aspecto = ancho / alto;
+
+  if (aspecto >= 1) {
+    columnasImagen = resolucion;
+    filasImagen = Math.max(1, Math.round(resolucion / aspecto));
+  } else {
+    filasImagen = resolucion;
+    columnasImagen = Math.max(1, Math.round(resolucion * aspecto));
+  }
+
+  lienzoMuestreo.width = columnasImagen;
+  lienzoMuestreo.height = filasImagen;
+  contextoMuestreo.clearRect(0, 0, columnasImagen, filasImagen);
+
+  if (espejo) {
+    contextoMuestreo.save();
+    contextoMuestreo.scale(-1, 1);
+    contextoMuestreo.drawImage(fuente, -columnasImagen, 0, columnasImagen, filasImagen);
+    contextoMuestreo.restore();
+  } else {
+    contextoMuestreo.drawImage(fuente, 0, 0, columnasImagen, filasImagen);
+  }
+
+  datosImagenActual = contextoMuestreo.getImageData(0, 0, columnasImagen, filasImagen).data;
+  paletaActual = extraerPaleta();
+}
+
+function procesarImagen(imagenElement) {
+  muestrearFuente(imagenElement, imagenElement.width, imagenElement.height, parametros.resolucion);
+}
+
+// Punto de entrada común: tanto el archivo subido como la foto capturada
+// desde la cámara terminan aquí como un <img> ya cargado.
+function usarImagenLista(imagen) {
+  imagenActual = imagen;
+  procesarImagen(imagenActual);
+  generarCampo();
+  actualizarPaletaUI();
+  mensajeInicial.classList.add("oculto");
+}
+
+function cargarImagen(archivo) {
+  const lector = new FileReader();
+
+  lector.onload = () => {
+    const imagen = new Image();
+    imagen.onload = () => usarImagenLista(imagen);
+    imagen.src = lector.result;
+  };
+
+  lector.readAsDataURL(archivo);
 }
 
 // ======================================================
-// 04 — REGLAS GENERATIVAS
+// 04B — ENTRADA DE CÁMARA EN TIEMPO REAL
+// ======================================================
+// Segunda fuente de imagen, alternativa al archivo subido: mientras la
+// cámara está activa, cada tick (sección 11, throttleado a ~15fps) vuelve
+// a muestrear el frame actual del <video> y regenera el campo — como si
+// se "subiera una imagen nueva" varias veces por segundo.
+//
+// Regenerar el campo completo recalcula ruido orgánico + glitch por cada
+// partícula (secciones 05-06), así que a resoluciones altas no alcanza a
+// hacerse a tiempo real. Por eso, mientras la cámara esté en vivo, se usa
+// como techo RESOLUCION_MAXIMA_TIEMPO_REAL en vez del valor del slider
+// (que sigue aplicándose tal cual a imágenes fijas y al cerrar la cámara).
+
+const RESOLUCION_MAXIMA_TIEMPO_REAL = 180; // 180×180 = 32.400 partículas
+const INTERVALO_VIDEO_EN_VIVO = 1 / 15; // segundos entre actualizaciones (~15fps)
+
+let flujoCamara = null;
+let camaraEnVivo = false;
+let ultimoMuestreoVideo = 0;
+
+async function activarCamara() {
+  mensajeInicial.classList.add("oculto"); // se elige la opción: el aviso ya no aplica
+
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    salidaCamaraEstado.textContent =
+      "El navegador bloqueó la cámara: abre el proyecto con un servidor local (http://localhost), no con file://";
+    panelCamara.classList.remove("oculto");
+    mensajeInicial.classList.remove("oculto"); // no hay fuente de imagen: vuelve a mostrarlo
+    return;
+  }
+
+  try {
+    flujoCamara = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+    });
+
+    videoCamara.srcObject = flujoCamara;
+    await videoCamara.play();
+
+    camaraEnVivo = true;
+    ultimoMuestreoVideo = 0; // fuerza un muestreo inmediato en el próximo tick
+
+    salidaCamaraEstado.textContent =
+      parametros.resolucion > RESOLUCION_MAXIMA_TIEMPO_REAL
+        ? `Tiempo real: resolución limitada a ${RESOLUCION_MAXIMA_TIEMPO_REAL} para mantener fluidez.`
+        : "";
+    panelCamara.classList.remove("oculto");
+  } catch (error) {
+    console.error("Error al activar la cámara:", error);
+
+    const mensajes = {
+      NotAllowedError: "Permiso denegado. Habilita la cámara para este sitio en el navegador.",
+      NotFoundError: "No se encontró ninguna cámara conectada.",
+      NotReadableError: "La cámara está siendo usada por otra aplicación.",
+    };
+
+    salidaCamaraEstado.textContent =
+      mensajes[error.name] || `No se pudo acceder a la cámara (${error.name || error.message})`;
+    panelCamara.classList.remove("oculto");
+    mensajeInicial.classList.remove("oculto"); // no hay fuente de imagen: vuelve a mostrarlo
+  }
+}
+
+// Al detener, el último frame en pantalla queda como imagen fija: se
+// congela como <img> para que sliders y "Restablecer" sigan funcionando
+// igual que con una imagen subida.
+function detenerCamara() {
+  camaraEnVivo = false;
+
+  if (videoCamara.videoWidth) {
+    const lienzoCaptura = document.createElement("canvas");
+    lienzoCaptura.width = videoCamara.videoWidth;
+    lienzoCaptura.height = videoCamara.videoHeight;
+
+    const contextoCaptura = lienzoCaptura.getContext("2d");
+    contextoCaptura.translate(lienzoCaptura.width, 0);
+    contextoCaptura.scale(-1, 1);
+    contextoCaptura.drawImage(videoCamara, 0, 0);
+
+    const imagen = new Image();
+    imagen.onload = () => {
+      imagenActual = imagen;
+    };
+    imagen.src = lienzoCaptura.toDataURL("image/png");
+  }
+
+  if (flujoCamara) {
+    flujoCamara.getTracks().forEach((pista) => pista.stop());
+    flujoCamara = null;
+  }
+
+  videoCamara.srcObject = null;
+  panelCamara.classList.add("oculto");
+}
+
+function actualizarCampoEnVivo(tiempo) {
+  if (!camaraEnVivo) return;
+  if (tiempo - ultimoMuestreoVideo < INTERVALO_VIDEO_EN_VIVO) return;
+  if (!videoCamara.videoWidth) return; // el video todavía no tiene un frame listo
+
+  ultimoMuestreoVideo = tiempo;
+
+  const resolucionEnVivo = Math.min(parametros.resolucion, RESOLUCION_MAXIMA_TIEMPO_REAL);
+  muestrearFuente(videoCamara, videoCamara.videoWidth, videoCamara.videoHeight, resolucionEnVivo, true);
+  generarCampo();
+  actualizarPaletaUI();
+}
+
+// ======================================================
+// 05 — REGLAS GENERATIVAS
 // ======================================================
 // Estas funciones representan decisiones de diseño.
 // Si cambian estas reglas, cambia la familia de resultados.
 
 // Regla A:
-// posición → distancia al origen de onda → onda → tamaño
-// El origen de la onda y su frecuencia se desplazan hacia el atractor
-// cuando está activo: la onda "nace" en el punto atractor y se
-// vuelve más rápida cerca de él.
-function calcularAlturaModulo(x, z, influenciaAtractor) {
-  const origenOnda = parametros.atractorActivo
-    ? { x: parametros.atractorX, z: parametros.atractorZ }
-    : { x: 0, z: 0 };
+// una fracción de las filas (proporcional al nivel de glitch) se
+// desplaza en X como bloque completo, referenciando el póster —
+// bandas de imagen "cortadas" y corridas.
+function generarDesplazamientosGlitch(filas) {
+  const desplazamientos = new Float32Array(filas);
 
-  const dxOnda = x - origenOnda.x;
-  const dzOnda = z - origenOnda.z;
-  const distancia = Math.sqrt(dxOnda * dxOnda + dzOnda * dzOnda);
+  for (let fila = 0; fila < filas; fila++) {
+    const activador = (aleatoriedadConSemilla(fila, 0, parametros.glitchSemilla) + 1) / 2;
+    if (activador > parametros.glitch) continue; // esta fila no glitchea
 
-  const frecuenciaEfectiva =
-    parametros.frecuencia + influenciaAtractor * parametros.atractorFrecuencia;
+    const magnitud = (aleatoriedadConSemilla(fila, 1, parametros.glitchSemilla) + 1) / 2;
+    const signo = aleatoriedadConSemilla(fila, 2, parametros.glitchSemilla) < 0 ? -1 : 1;
 
-  const onda = Math.sin(distancia * frecuenciaEfectiva) * parametros.amplitud;
+    desplazamientos[fila] = signo * magnitud * parametros.glitch * columnasImagen * 0.25;
+  }
 
-  const ruido =
-    aleatoriedadConSemilla(x, z, parametros.semilla) *
-    parametros.aleatoriedad;
-
-  const empuje = influenciaAtractor * parametros.atractorFuerza;
-
-  return Math.max(0.25, 1.2 + onda + ruido + empuje);
+  return desplazamientos;
 }
 
 // Regla B:
-// la orientación depende de la dirección radial respecto al centro.
-function calcularRotacionModulo(x, z) {
-  const direccion = Math.atan2(z, x);
-  return direccion * parametros.rotacion;
+// color = contenido real de píxeles de la imagen (o, en modo "Colores
+// personalizados", un degradado propio mapeado por brillo), con el canal
+// rojo y azul muestreados desde columnas ligeramente distintas (separación
+// de canal / aberración cromática) cuando la fila está en glitch.
+//
+// La especularidad y la saturación se aplican en espacio HSL, tocando solo
+// luminosidad/saturación — nunca cada canal RGB por separado. Multiplicar
+// r, g y b de forma independiente y recortar a 1 (como hacía antes) empuja
+// cualquier tono claro hacia blanco puro, y ese efecto se nota mucho más
+// al agrandar las partículas: cada una pasa de ser un punto casi invisible
+// a un bloque visible sin color. Por eso la luminosidad nunca llega a 1.
+function calcularColorParticula(col, fila, desplazamientoFila) {
+  const desplazamientoCanal = Math.round(desplazamientoFila * 0.4);
+
+  const colR = THREE.MathUtils.clamp(col + desplazamientoCanal, 0, columnasImagen - 1);
+  const colB = THREE.MathUtils.clamp(col - desplazamientoCanal, 0, columnasImagen - 1);
+
+  const r = datosImagenActual[(fila * columnasImagen + colR) * 4] / 255;
+  const g = datosImagenActual[(fila * columnasImagen + col) * 4 + 1] / 255;
+  const b = datosImagenActual[(fila * columnasImagen + colB) * 4 + 2] / 255;
+
+  const brillo = (r + g + b) / 3;
+
+  if (parametros.coloresPersonalizadosActivo) {
+    aplicarGradientePersonalizado(brillo);
+  } else {
+    colorEscratch.setRGB(r, g, b);
+  }
+
+  const hsl = colorEscratch.getHSL(hslEscratch);
+  const saturacion = THREE.MathUtils.clamp(hsl.s * parametros.saturacion, 0, 1);
+
+  // El degradado personalizado ya define su propia luminosidad a propósito;
+  // la especularidad solo potencia el brillo real de la imagen.
+  const luminosidad = parametros.coloresPersonalizadosActivo
+    ? hsl.l
+    : THREE.MathUtils.clamp(hsl.l * (1 + parametros.especularidad * brillo * brillo), 0, 0.92);
+
+  colorEscratch.setHSL(hsl.h, saturacion, luminosidad);
+
+  return { r: colorEscratch.r, g: colorEscratch.g, b: colorEscratch.b, brillo };
+}
+
+// Interpola brillo (0..1) a lo largo de hasta 4 colores elegidos por el
+// usuario, como un degradado duotono/quadtono. Escribe en colorEscratch.
+function aplicarGradientePersonalizado(brillo) {
+  const escala = brillo * (coloresPersonalizados.length - 1);
+  const indiceInferior = Math.floor(escala);
+  const indiceSuperior = Math.min(coloresPersonalizados.length - 1, indiceInferior + 1);
+  const mezcla = escala - indiceInferior;
+
+  colorEscratch.copy(coloresPersonalizados[indiceInferior]);
+  colorEscratch.lerp(coloresPersonalizados[indiceSuperior], mezcla);
+}
+
+// Ruido de valor suavizado (interpolación bilineal + smoothstep) sobre el
+// mismo generador con semilla que el resto del sistema: continuo en vez
+// de aleatorio punto a punto, para que la distorsión fluya como tela en
+// vez de saltar como estática. Lo usa la Regla C, más abajo.
+function suavizar(t) {
+  return t * t * (3 - 2 * t);
+}
+
+function ruidoValor2D(x, y, semilla) {
+  const x0 = Math.floor(x);
+  const y0 = Math.floor(y);
+
+  const sx = suavizar(x - x0);
+  const sy = suavizar(y - y0);
+
+  const n00 = aleatoriedadConSemilla(x0, y0, semilla);
+  const n10 = aleatoriedadConSemilla(x0 + 1, y0, semilla);
+  const n01 = aleatoriedadConSemilla(x0, y0 + 1, semilla);
+  const n11 = aleatoriedadConSemilla(x0 + 1, y0 + 1, semilla);
+
+  const nx0 = THREE.MathUtils.lerp(n00, n10, sx);
+  const nx1 = THREE.MathUtils.lerp(n01, n11, sx);
+
+  return THREE.MathUtils.lerp(nx0, nx1, sy);
+}
+
+// Tres octavas sumadas: un patrón orgánico con detalle grueso y fino a
+// la vez, en vez de una sola onda regular.
+function ruidoOrganico(x, y, semilla) {
+  let total = 0;
+  let amplitud = 1;
+  let frecuencia = 1;
+  let normalizador = 0;
+
+  for (let octava = 0; octava < 3; octava++) {
+    total += ruidoValor2D(x * frecuencia, y * frecuencia, semilla + octava * 101) * amplitud;
+    normalizador += amplitud;
+    amplitud *= 0.5;
+    frecuencia *= 2;
+  }
+
+  return total / normalizador; // -1..1
 }
 
 // Regla C:
-// posición → distancia al punto atractor → intensidad (0..1).
-// Esta intensidad se usa luego para elevar y teñir los módulos cercanos.
-function calcularInfluenciaAtractor(x, z) {
-  if (!parametros.atractorActivo) return 0;
+// brillo del píxel → profundidad (relieve); posición en el plano → ruido
+// orgánico en X, Y y Z — pliegues y desgarros continuos, no bandas rectas.
+function calcularProfundidadYDistorsion(px, py, brillo) {
+  let z = (brillo - 0.5) * parametros.profundidad;
 
-  const dx = x - parametros.atractorX;
-  const dz = z - parametros.atractorZ;
-  const distancia = Math.sqrt(dx * dx + dz * dz);
+  const escalaRuido = 0.35;
+  const semilla = parametros.glitchSemilla;
 
-  const caida = Math.max(0, 1 - distancia / parametros.atractorRadio);
+  const ruidoX = ruidoOrganico(px * escalaRuido, py * escalaRuido, semilla);
+  const ruidoY = ruidoOrganico(px * escalaRuido + 71, py * escalaRuido + 71, semilla + 300);
+  const ruidoZ = ruidoOrganico(px * escalaRuido + 149, py * escalaRuido + 149, semilla + 700);
 
-  // Se eleva al cuadrado para suavizar el borde del área de influencia.
-  return caida * caida;
+  px += ruidoX * parametros.distorsion * 2;
+  py += ruidoY * parametros.distorsion; // menor peso: mantiene legible la silueta
+  z += ruidoZ * parametros.distorsion * 2;
+
+  return { px, py, z };
 }
 
 // ======================================================
-// 05 — GENERAR CAMPO
+// 06 — GENERAR CAMPO
 // ======================================================
 
 function generarCampo() {
-  limpiarCampo();
+  if (!datosImagenActual) return;
 
-  const ancho = (parametros.columnas - 1) * parametros.separacion;
-  const profundidad = (parametros.filas - 1) * parametros.separacion;
+  const anchoEscena = 12; // unidades de escena que ocupa el eje mayor de la imagen
+  const escala = anchoEscena / Math.max(columnasImagen, filasImagen);
 
-  for (let columna = 0; columna < parametros.columnas; columna++) {
-    for (let fila = 0; fila < parametros.filas; fila++) {
-      const x = columna * parametros.separacion - ancho / 2;
-      const z = fila * parametros.separacion - profundidad / 2;
+  const desplazamientosGlitch = generarDesplazamientosGlitch(filasImagen);
 
-      const influenciaAtractor = calcularInfluenciaAtractor(x, z);
-      const altura = calcularAlturaModulo(x, z, influenciaAtractor);
-      const rotacion = calcularRotacionModulo(x, z);
+  const posiciones = geometriaParticulas.attributes.position.array;
+  const colores = geometriaParticulas.attributes.color.array;
 
-      const modulo = new THREE.Mesh(geometriaModulo, materialModulo);
+  let indiceParticula = 0;
 
-      // Los módulos dentro del radio del atractor reciben un material propio
-      // teñido hacia el color del atractor; el resto comparte el material base.
-      if (influenciaAtractor > 0) {
-        modulo.material = new THREE.MeshStandardMaterial({
-          color: materialModulo.color.clone().lerp(colorAtractor, influenciaAtractor),
-          roughness: 0.58,
-          metalness: 0.03,
-        });
-      }
+  bucleFilas:
+  for (let fila = 0; fila < filasImagen; fila++) {
+    const desplazamientoFila = desplazamientosGlitch[fila];
 
-      // Escalamos en las tres dimensiones: el "tamaño" de la esfera
-      // reemplaza a la altura de la barra original.
-      modulo.scale.setScalar(altura);
+    for (let col = 0; col < columnasImagen; col++) {
+      if (indiceParticula >= CAPACIDAD_MAXIMA_PARTICULAS) break bucleFilas;
 
-      // La esfera crece desde su centro en todas direcciones.
-      // Por eso la elevamos la mitad de su tamaño para que apoye en el suelo.
-      const yBase = altura / 2;
-      modulo.position.set(x, yBase, z);
+      const alfa = datosImagenActual[(fila * columnasImagen + col) * 4 + 3];
+      if (alfa < 10) continue; // píxeles casi transparentes no generan partícula
 
-      // Guardamos la posición de reposo y una fase propia: el micrófono
-      // desplaza cada módulo verticalmente a partir de estos valores.
-      modulo.userData.yBase = yBase;
-      modulo.userData.fase = (x + z) * 0.6;
+      const color = calcularColorParticula(col, fila, desplazamientoFila);
 
-      modulo.rotation.y = rotacion;
-      modulo.castShadow = true;
-      modulo.receiveShadow = true;
+      let px = (col - columnasImagen / 2) * escala + desplazamientoFila * escala;
+      let py = (filasImagen / 2 - fila) * escala;
 
-      grupoCampo.add(modulo);
+      const distorsionado = calcularProfundidadYDistorsion(px, py, color.brillo);
+      px = distorsionado.px;
+      py = distorsionado.py;
+      const z = distorsionado.z;
+
+      const i3 = indiceParticula * 3;
+      posiciones[i3] = px;
+      posiciones[i3 + 1] = py;
+      posiciones[i3 + 2] = z;
+
+      particulasBaseX[indiceParticula] = px;
+      particulasBaseY[indiceParticula] = py;
+      particulasBaseZ[indiceParticula] = z;
+      particulasProfundidad[indiceParticula] = Math.abs(color.brillo - 0.5) * 2;
+
+      const anguloJitter =
+        ((aleatoriedadConSemilla(indiceParticula, 4, parametros.glitchSemilla) + 1) / 2) *
+        Math.PI * 2;
+      const magnitudJitter =
+        (aleatoriedadConSemilla(indiceParticula, 5, parametros.glitchSemilla) + 1) / 2;
+
+      particulasJitterX[indiceParticula] = Math.cos(anguloJitter) * magnitudJitter;
+      particulasJitterY[indiceParticula] = Math.sin(anguloJitter) * magnitudJitter;
+      particulasJitterZ[indiceParticula] =
+        aleatoriedadConSemilla(indiceParticula, 6, parametros.glitchSemilla);
+
+      particulasFase[indiceParticula] = (px + py) * 0.5 + indiceParticula * 0.013;
+
+      colores[i3] = color.r;
+      colores[i3 + 1] = color.g;
+      colores[i3 + 2] = color.b;
+
+      indiceParticula++;
     }
   }
-}
 
-function limpiarCampo() {
-  while (grupoCampo.children.length > 0) {
-    grupoCampo.remove(grupoCampo.children[0]);
-  }
+  totalParticulasActivas = indiceParticula;
+
+  geometriaParticulas.attributes.position.needsUpdate = true;
+  geometriaParticulas.attributes.color.needsUpdate = true;
+  geometriaParticulas.setDrawRange(0, totalParticulasActivas);
+
+  materialParticulas.size = parametros.tamanioParticula;
 }
 
 // ======================================================
-// 06 — ALEATORIEDAD CONTROLADA
+// 07 — ALEATORIEDAD CONTROLADA
 // ======================================================
 // Devuelve un valor repetible entre -1 y 1.
-// Una misma semilla produce siempre el mismo patrón.
+// La misma semilla produce siempre el mismo patrón.
 
 function aleatoriedadConSemilla(x, z, semilla) {
   const valor =
@@ -270,98 +546,46 @@ function aleatoriedadConSemilla(x, z, semilla) {
 }
 
 // ======================================================
-// 06B — ATRACTOR: UBICACIÓN POR CLICK
+// 08 — AUDIO: MOVIMIENTO Y DECIBELES
 // ======================================================
-// Un click sobre el suelo proyecta un rayo desde la cámara y calcula
-// dónde cruza el plano y=0. Ese punto pasa a ser el atractor.
+// El volumen del micrófono controla cuánto se dispersan las partículas
+// desde su posición de reposo: en silencio, la imagen se lee nítida;
+// con volumen alto, se fragmenta en ruido. Cada partícula tiene su
+// propia dirección y fase, así el movimiento no es un salto rígido.
 
-const raycaster = new THREE.Raycaster();
-const planoSuelo = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const puntoInterseccion = new THREE.Vector3();
-let inicioPuntero = null;
+let flujoAudio = null;
+let contextoAudioGlobal = null;
+let analizadorAudio = null;
+let datosAudio = null;
+let nivelAudio = 0;
+let nivelDecibeles = -60;
 
-function obtenerCoordenadasNormalizadas(evento) {
-  const rect = renderer.domElement.getBoundingClientRect();
-
-  return new THREE.Vector2(
-    ((evento.clientX - rect.left) / rect.width) * 2 - 1,
-    -((evento.clientY - rect.top) / rect.height) * 2 + 1
-  );
-}
-
-renderer.domElement.addEventListener("pointerdown", (evento) => {
-  // Solo el click izquierdo ubica el atractor; el derecho desplaza la cámara.
-  if (evento.button !== 0) return;
-
-  inicioPuntero = { x: evento.clientX, y: evento.clientY };
-});
-
-renderer.domElement.addEventListener("pointerup", (evento) => {
-  if (!inicioPuntero) return;
-
-  const distanciaArrastre = Math.hypot(
-    evento.clientX - inicioPuntero.x,
-    evento.clientY - inicioPuntero.y
-  );
-
-  inicioPuntero = null;
-
-  // Si el puntero se movió lo suficiente, fue un arrastre de cámara
-  // (OrbitControls), no un intento de ubicar el atractor.
-  if (distanciaArrastre > 4) return;
-
-  raycaster.setFromCamera(obtenerCoordenadasNormalizadas(evento), camara);
-
-  if (!raycaster.ray.intersectPlane(planoSuelo, puntoInterseccion)) return;
-
-  parametros.atractorX = puntoInterseccion.x;
-  parametros.atractorZ = puntoInterseccion.z;
-  parametros.atractorActivo = true;
-
-  controlAtractorActivo.checked = true;
-  actualizarPosicionAtractorUI();
-  actualizarMarcadorAtractor();
-  generarCampo();
-});
-
-// ======================================================
-// 06C — MICRÓFONO: MOVIMIENTO VERTICAL
-// ======================================================
-// El volumen del micrófono controla cuánto "flotan" los módulos.
-// Cada módulo tiene su propia fase, así el movimiento se ve como
-// una ola que recorre el campo en lugar de un salto rígido.
-
-let flujoMicrofono = null;
-let analizadorMicrofono = null;
-let datosMicrofono = null;
-let nivelMicrofono = 0;
-
-async function activarMicrofono() {
+async function activarAudio() {
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     // Ocurre en contextos no seguros: abrir index.html con file:// en vez
     // de servirlo desde http://localhost (Live Server u otro servidor).
-    salidaMicrofonoEstado.textContent =
+    salidaAudioEstado.textContent =
       "El navegador bloqueó el micrófono: abre el proyecto con un servidor local (http://localhost), no con file://";
     return;
   }
 
   try {
-    flujoMicrofono = await navigator.mediaDevices.getUserMedia({ audio: true });
+    flujoAudio = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    const contextoAudio = new (window.AudioContext || window.webkitAudioContext)();
-    if (contextoAudio.state === "suspended") await contextoAudio.resume();
+    contextoAudioGlobal = new (window.AudioContext || window.webkitAudioContext)();
+    if (contextoAudioGlobal.state === "suspended") await contextoAudioGlobal.resume();
 
-    const fuente = contextoAudio.createMediaStreamSource(flujoMicrofono);
+    const fuente = contextoAudioGlobal.createMediaStreamSource(flujoAudio);
 
-    analizadorMicrofono = contextoAudio.createAnalyser();
-    analizadorMicrofono.fftSize = 256;
-    datosMicrofono = new Uint8Array(analizadorMicrofono.frequencyBinCount);
+    analizadorAudio = contextoAudioGlobal.createAnalyser();
+    analizadorAudio.fftSize = 512;
+    datosAudio = new Uint8Array(analizadorAudio.fftSize);
 
-    fuente.connect(analizadorMicrofono);
+    fuente.connect(analizadorAudio);
 
-    parametros.microfonoActivo = true;
-    controlMicrofonoActivar.textContent = "Detener micrófono";
-    salidaMicrofonoEstado.textContent = "Escuchando…";
+    parametros.audioActivo = true;
+    controlAudioActivar.textContent = "Detener micrófono";
+    salidaAudioEstado.textContent = "Escuchando…";
   } catch (error) {
     console.error("Error al activar el micrófono:", error);
 
@@ -371,101 +595,193 @@ async function activarMicrofono() {
       NotReadableError: "El micrófono está siendo usado por otra aplicación.",
     };
 
-    salidaMicrofonoEstado.textContent =
+    salidaAudioEstado.textContent =
       mensajes[error.name] || `No se pudo acceder al micrófono (${error.name || error.message})`;
   }
 }
 
-function detenerMicrofono() {
-  parametros.microfonoActivo = false;
-  nivelMicrofono = 0;
+function detenerAudio() {
+  parametros.audioActivo = false;
+  nivelAudio = 0;
+  nivelDecibeles = -60;
 
-  if (flujoMicrofono) {
-    flujoMicrofono.getTracks().forEach((pista) => pista.stop());
-    flujoMicrofono = null;
+  if (flujoAudio) {
+    flujoAudio.getTracks().forEach((pista) => pista.stop());
+    flujoAudio = null;
   }
 
-  analizadorMicrofono = null;
-  datosMicrofono = null;
+  analizadorAudio = null;
+  datosAudio = null;
 
-  controlMicrofonoActivar.textContent = "Activar micrófono";
-  salidaMicrofonoEstado.textContent = "Micrófono apagado";
-  salidaMicrofonoNivel.value = "0%";
+  controlAudioActivar.textContent = "Activar micrófono";
+  salidaAudioEstado.textContent = "Micrófono apagado";
+  salidaAudioNivel.value = "0%";
+  salidaDecibeles.textContent = "-60.0 dB";
 }
 
-function actualizarNivelMicrofono() {
-  if (!parametros.microfonoActivo || !analizadorMicrofono) return;
+// RMS del dominio temporal → aproximación de decibeles relativos a
+// full-scale (dBFS). No es un dB SPL calibrado, pero es una lectura
+// en tiempo real consistente con el volumen percibido.
+function actualizarNivelAudio() {
+  if (!parametros.audioActivo || !analizadorAudio) return;
 
-  analizadorMicrofono.getByteFrequencyData(datosMicrofono);
+  analizadorAudio.getByteTimeDomainData(datosAudio);
 
-  let suma = 0;
-  for (let i = 0; i < datosMicrofono.length; i++) {
-    suma += datosMicrofono[i];
+  let sumaCuadrados = 0;
+  for (let i = 0; i < datosAudio.length; i++) {
+    const muestra = (datosAudio[i] - 128) / 128;
+    sumaCuadrados += muestra * muestra;
   }
 
-  nivelMicrofono = suma / datosMicrofono.length / 255;
-  salidaMicrofonoNivel.value = `${Math.round(nivelMicrofono * 100)}%`;
+  const rms = Math.sqrt(sumaCuadrados / datosAudio.length);
+
+  nivelAudio = Math.min(1, rms * 4);
+  nivelDecibeles = rms > 0.0001 ? Math.max(-60, 20 * Math.log10(rms)) : -60;
+
+  salidaAudioNivel.value = `${Math.round(nivelAudio * 100)}%`;
+  salidaDecibeles.textContent = `${nivelDecibeles.toFixed(1)} dB`;
 }
 
-function aplicarMovimientoMicrofono(tiempo) {
-  grupoCampo.children.forEach((modulo) => {
-    const oscilacion = (Math.sin(tiempo * 6 + modulo.userData.fase) + 1) / 2;
-    const empujeMicrofono = nivelMicrofono * parametros.microfonoFuerza * oscilacion;
+// El rango de movimiento de cada partícula parte de su propia profundidad:
+// las más alejadas del punto medio de brillo (más relieve) tienen hasta el
+// doble de rango que las que casi no sobresalen. El slider "Profundidad"
+// también sube el techo general, así el relieve y el movimiento crecen
+// juntos.
+function aplicarMovimientoAudio(tiempo) {
+  if (totalParticulasActivas === 0) return;
 
-    modulo.position.y = modulo.userData.yBase + empujeMicrofono;
+  const posicionesAttr = geometriaParticulas.attributes.position;
+  const arreglo = posicionesAttr.array;
+  const techoProfundidad = 1 + parametros.profundidad * 0.2;
+
+  for (let i = 0; i < totalParticulasActivas; i++) {
+    const oscilacion = Math.sin(tiempo * 5 + particulasFase[i]);
+    const rango = parametros.audioFuerza * (0.5 + particulasProfundidad[i] * 1.5) * techoProfundidad;
+    const empuje = nivelAudio * rango * oscilacion;
+
+    const i3 = i * 3;
+    arreglo[i3] = particulasBaseX[i] + particulasJitterX[i] * empuje;
+    arreglo[i3 + 1] = particulasBaseY[i] + particulasJitterY[i] * empuje;
+    arreglo[i3 + 2] = particulasBaseZ[i] + particulasJitterZ[i] * empuje;
+  }
+
+  posicionesAttr.needsUpdate = true;
+}
+
+// ======================================================
+// 09 — PALETA CROMÁTICA
+// ======================================================
+// Promedia el color de cinco franjas verticales de la imagen ya
+// muestreada: una paleta representativa y barata de calcular.
+
+function extraerPaleta(cantidad = 5) {
+  const paleta = [];
+  const paso = Math.max(1, Math.floor(filasImagen / 20));
+
+  for (let i = 0; i < cantidad; i++) {
+    const col = Math.min(columnasImagen - 1, Math.floor(((i + 0.5) / cantidad) * columnasImagen));
+
+    let r = 0, g = 0, b = 0, contador = 0;
+
+    for (let fila = 0; fila < filasImagen; fila += paso) {
+      const indice = (fila * columnasImagen + col) * 4;
+      r += datosImagenActual[indice];
+      g += datosImagenActual[indice + 1];
+      b += datosImagenActual[indice + 2];
+      contador++;
+    }
+
+    paleta.push({
+      r: Math.round(r / contador),
+      g: Math.round(g / contador),
+      b: Math.round(b / contador),
+    });
+  }
+
+  return paleta;
+}
+
+function rgbAHex(r, g, b) {
+  const componente = (valor) => valor.toString(16).padStart(2, "0");
+  return `#${componente(r)}${componente(g)}${componente(b)}`.toUpperCase();
+}
+
+function actualizarPaletaUI() {
+  hudPaleta.innerHTML = "";
+
+  paletaActual.forEach(({ r, g, b }) => {
+    const hex = rgbAHex(r, g, b);
+
+    const item = document.createElement("div");
+    item.className = "hud-swatch-item";
+
+    const chip = document.createElement("span");
+    chip.className = "hud-swatch";
+    chip.style.background = hex;
+
+    const etiqueta = document.createElement("span");
+    etiqueta.textContent = hex;
+
+    item.appendChild(chip);
+    item.appendChild(etiqueta);
+    hudPaleta.appendChild(item);
   });
 }
 
 // ======================================================
-// 07 — INTERFAZ
+// 10 — INTERFAZ
 // ======================================================
 
+const parametrosEnteros = ["resolucion"];
+
 const controles = {
-  columnas: document.querySelector("#columnas"),
-  filas: document.querySelector("#filas"),
-  separacion: document.querySelector("#separacion"),
-  amplitud: document.querySelector("#amplitud"),
-  frecuencia: document.querySelector("#frecuencia"),
-  rotacion: document.querySelector("#rotacion"),
-  aleatoriedad: document.querySelector("#aleatoriedad"),
-  semilla: document.querySelector("#semilla"),
-  atractorFuerza: document.querySelector("#atractor-fuerza"),
-  atractorRadio: document.querySelector("#atractor-radio"),
-  atractorFrecuencia: document.querySelector("#atractor-frecuencia"),
-  microfonoFuerza: document.querySelector("#microfono-fuerza"),
+  resolucion: document.querySelector("#resolucion"),
+  tamanioParticula: document.querySelector("#tamanio-particula"),
+  profundidad: document.querySelector("#profundidad"),
+  especularidad: document.querySelector("#especularidad"),
+  saturacion: document.querySelector("#saturacion"),
+  distorsion: document.querySelector("#distorsion"),
+  glitch: document.querySelector("#glitch"),
+  audioFuerza: document.querySelector("#audio-fuerza"),
 };
 
 const valoresVisibles = {
-  columnas: document.querySelector("#columnas-valor"),
-  filas: document.querySelector("#filas-valor"),
-  separacion: document.querySelector("#separacion-valor"),
-  amplitud: document.querySelector("#amplitud-valor"),
-  frecuencia: document.querySelector("#frecuencia-valor"),
-  rotacion: document.querySelector("#rotacion-valor"),
-  aleatoriedad: document.querySelector("#aleatoriedad-valor"),
-  semilla: document.querySelector("#semilla-valor"),
-  atractorFuerza: document.querySelector("#atractor-fuerza-valor"),
-  atractorRadio: document.querySelector("#atractor-radio-valor"),
-  atractorFrecuencia: document.querySelector("#atractor-frecuencia-valor"),
-  microfonoFuerza: document.querySelector("#microfono-fuerza-valor"),
+  resolucion: document.querySelector("#resolucion-valor"),
+  tamanioParticula: document.querySelector("#tamanio-particula-valor"),
+  profundidad: document.querySelector("#profundidad-valor"),
+  especularidad: document.querySelector("#especularidad-valor"),
+  saturacion: document.querySelector("#saturacion-valor"),
+  distorsion: document.querySelector("#distorsion-valor"),
+  glitch: document.querySelector("#glitch-valor"),
+  audioFuerza: document.querySelector("#audio-fuerza-valor"),
 };
 
-const controlAtractorActivo = document.querySelector("#atractor-activo");
-const controlAtractorColor = document.querySelector("#atractor-color");
-const salidaAtractorPosicion = document.querySelector("#atractor-posicion");
+const controlImagenInput = document.querySelector("#imagen-input");
+const mensajeInicial = document.querySelector("#mensaje-inicial");
 
-const controlMicrofonoActivar = document.querySelector("#microfono-activar");
-const salidaMicrofonoEstado = document.querySelector("#microfono-estado");
-const salidaMicrofonoNivel = document.querySelector("#microfono-nivel");
+const controlColoresPersonalizadosActivo = document.querySelector("#colores-personalizados-activo");
+const panelColoresPersonalizados = document.querySelector("#paleta-personalizada");
+const controlesColoresPersonalizados = [
+  document.querySelector("#color-personalizado-1"),
+  document.querySelector("#color-personalizado-2"),
+  document.querySelector("#color-personalizado-3"),
+  document.querySelector("#color-personalizado-4"),
+];
 
-function actualizarPosicionAtractorUI() {
-  salidaAtractorPosicion.value =
-    `x ${parametros.atractorX.toFixed(2)} · z ${parametros.atractorZ.toFixed(2)}`;
-}
+const controlCamaraActivar = document.querySelector("#camara-activar");
+const controlCamaraDetener = document.querySelector("#camara-detener");
+const panelCamara = document.querySelector("#panel-camara");
+const videoCamara = document.querySelector("#camara-video");
+const salidaCamaraEstado = document.querySelector("#camara-estado");
+
+const controlAudioActivar = document.querySelector("#audio-activar");
+const salidaAudioEstado = document.querySelector("#audio-estado");
+const salidaAudioNivel = document.querySelector("#audio-nivel");
+
+const hudPaleta = document.querySelector("#hud-paleta");
+const salidaDecibeles = document.querySelector("#hud-decibeles");
 
 function actualizarParametro(nombre, valor) {
-  const parametrosEnteros = ["columnas", "filas", "semilla"];
-
   parametros[nombre] = parametrosEnteros.includes(nombre)
     ? Number.parseInt(valor, 10)
     : Number.parseFloat(valor);
@@ -473,6 +789,11 @@ function actualizarParametro(nombre, valor) {
   valoresVisibles[nombre].value = parametrosEnteros.includes(nombre)
     ? parametros[nombre]
     : parametros[nombre].toFixed(2);
+
+  if (nombre === "resolucion" && imagenActual) {
+    procesarImagen(imagenActual);
+    actualizarPaletaUI();
+  }
 
   generarCampo();
 }
@@ -483,39 +804,45 @@ Object.entries(controles).forEach(([nombre, control]) => {
   });
 });
 
-controlAtractorActivo.addEventListener("change", (evento) => {
-  parametros.atractorActivo = evento.target.checked;
-  actualizarMarcadorAtractor();
+controlImagenInput.addEventListener("change", (evento) => {
+  const archivo = evento.target.files[0];
+  if (!archivo) return;
+
+  mensajeInicial.classList.add("oculto"); // se elige la opción: el aviso ya no aplica
+  cargarImagen(archivo);
+});
+
+controlColoresPersonalizadosActivo.addEventListener("change", (evento) => {
+  parametros.coloresPersonalizadosActivo = evento.target.checked;
+  panelColoresPersonalizados.classList.toggle("oculto", !evento.target.checked);
   generarCampo();
 });
 
-controlAtractorColor.addEventListener("input", (evento) => {
-  colorAtractor.set(evento.target.value);
-  actualizarMarcadorAtractor();
-  generarCampo();
+controlesColoresPersonalizados.forEach((control, indice) => {
+  control.addEventListener("input", (evento) => {
+    coloresPersonalizados[indice].set(evento.target.value);
+    generarCampo();
+  });
 });
 
-controlMicrofonoActivar.addEventListener("click", () => {
-  if (parametros.microfonoActivo) {
-    detenerMicrofono();
+controlCamaraActivar.addEventListener("click", () => activarCamara());
+controlCamaraDetener.addEventListener("click", () => detenerCamara());
+
+controlAudioActivar.addEventListener("click", () => {
+  if (parametros.audioActivo) {
+    detenerAudio();
   } else {
-    activarMicrofono();
+    activarAudio();
   }
 });
 
-document.querySelector("#regenerar").addEventListener("click", () => {
-  parametros.semilla = Math.floor(Math.random() * 100) + 1;
-
-  controles.semilla.value = parametros.semilla;
-  valoresVisibles.semilla.value = parametros.semilla;
-
+document.querySelector("#nuevo-glitch").addEventListener("click", () => {
+  parametros.glitchSemilla = Math.floor(Math.random() * 1000) + 1;
   generarCampo();
 });
 
 document.querySelector("#restablecer").addEventListener("click", () => {
   Object.assign(parametros, valoresIniciales);
-
-  const parametrosEnteros = ["columnas", "filas", "semilla"];
 
   Object.entries(controles).forEach(([nombre, control]) => {
     control.value = parametros[nombre];
@@ -525,19 +852,27 @@ document.querySelector("#restablecer").addEventListener("click", () => {
       : parametros[nombre].toFixed(2);
   });
 
-  controlAtractorActivo.checked = parametros.atractorActivo;
-  colorAtractor.set(colorAtractorInicial);
-  controlAtractorColor.value = colorAtractorInicial;
-  actualizarPosicionAtractorUI();
-  actualizarMarcadorAtractor();
+  controlColoresPersonalizadosActivo.checked = parametros.coloresPersonalizadosActivo;
+  panelColoresPersonalizados.classList.add("oculto");
 
-  detenerMicrofono();
+  coloresPersonalizadosInicial.forEach((hex, indice) => {
+    coloresPersonalizados[indice].set(hex);
+    controlesColoresPersonalizados[indice].value = hex;
+  });
+
+  detenerAudio();
+  detenerCamara();
+
+  if (imagenActual) {
+    procesarImagen(imagenActual);
+    actualizarPaletaUI();
+  }
 
   generarCampo();
 });
 
 // ======================================================
-// 08 — BUCLE DE ANIMACIÓN
+// 11 — BUCLE DE ANIMACIÓN
 // ======================================================
 
 const reloj = new THREE.Clock();
@@ -545,8 +880,11 @@ const reloj = new THREE.Clock();
 function animar() {
   requestAnimationFrame(animar);
 
-  actualizarNivelMicrofono();
-  aplicarMovimientoMicrofono(reloj.getElapsedTime());
+  const tiempo = reloj.getElapsedTime();
+
+  actualizarCampoEnVivo(tiempo);
+  actualizarNivelAudio();
+  aplicarMovimientoAudio(tiempo);
 
   controlesOrbita.update();
   renderer.render(escena, camara);
@@ -564,7 +902,4 @@ function ajustarVentana() {
 
 window.addEventListener("resize", ajustarVentana);
 
-actualizarPosicionAtractorUI();
-actualizarMarcadorAtractor();
-generarCampo();
 animar();
