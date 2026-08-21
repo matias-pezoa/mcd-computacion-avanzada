@@ -5,95 +5,388 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Matías Pezoa — Computación Avanzada</title>
   <meta name="description" content="Perfil de Matías Pezoa para el curso Computación Avanzada 2026.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script type="module" src="https://unpkg.com/@google/model-viewer@3.5.0/dist/model-viewer.min.js"></script>
 </head>
 <body>
-  <div class="aurora" aria-hidden="true">
-    <span></span>
-    <span></span>
-    <span></span>
-  </div>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"></div>
 
-  <main class="page">
-    <header class="hero">
-      <p class="eyebrow">Computación Avanzada 2026</p>
-      <h1>Matías Pezoa</h1>
-      <p class="lead">Diseño Industrial + Magíster en Ciencias del Diseño.</p>
-      <figure class="media">
-        <img src="assets/images/PERFIL.jpeg">
-    </header>
+  <header class="frame-bar">
+    <span>MP — 2026</span>
+    <span>Computación Avanzada</span>
+  </header>
 
-    <section class="card">
-      <h2>Perfil</h2>
-      <dl>
-        <dt>Qué hago hoy</dt>
-        <dd>Trabajo como diseñador y docente universitario, especializado en la intersección entre moda, tecnología y fabricación digital. Desarrollo proyectos que integran diseño, procesos de fabricación y herramientas computacionales aplicadas al cuerpo y al vestuario.</dd>
-        <dt>Qué me gustaría aprender en este curso</dt>
-        <dd>Cómo utilizar sistemas digitales y computacionales para expandir los procesos de diseño de moda, conectando cuerpo, geometría, materialidad, fabricación e interacción.</dd>
-      </dl>
-    </section>
+  <main>
 
-    <section class="card">
-      <h2>Intereses</h2>
-      <ul class="tags">
-        <li>Diseño computacional</li>
-        <li>Moda y tecnología</li>
-        <li>Fabricación digital</li>
-        <li>Diseño paramétrico</li>
-        <li>Wearables e interacción</li>
-        <li>Materiales y experimentación</li>
-        <li>Inteligencia artificial aplicada al diseño</li>
-      </ul>
-    </section>
-
-    <section class="card">
-      <h2>Una pregunta que me interesa explorar</h2>
-      <p class="pull">¿Cómo puede el diseño computacional transformar la relación entre cuerpo, material y fabricación para generar nuevas formas de diseñar y producir indumentaria?</p>
-    </section>
-
-    <section class="card">
-      <h2>Algo que me inspira</h2>
-      <p>Los proyectos donde la tecnología no funciona únicamente como una herramienta para fabricar una forma previamente diseñada, sino como parte activa del proceso de diseño, permitiendo que el cuerpo, los materiales, los datos y los sistemas de fabricación participen en la generación del resultado.</p>
-      <figure class="media">
-        <img src="assets/images/Hungry.jpg" alt="Imagen de referencia del proceso de diseño de Matías Pezoa" loading="lazy">
-      </figure>
-    </section>
-
-    <section class="card">
-      <h2>Modelo 3D</h2>
-      <div class="media">
-        <model-viewer
-          class="model"
-          src="assets/models/GAGA.glb"
-          alt="Modelo 3D GAGA de Matías Pezoa"
-          camera-controls
-          touch-action="pan-y"
-          auto-rotate
-          shadow-intensity="1"
-          exposure="1">
-        </model-viewer>
+    <!-- ESPÉCIMEN — retrato observado -->
+    <section class="specimen" aria-label="Presentación">
+      <div class="specimen-heading">
+        <span class="eyebrow">Registro 001 — Diseño Industrial / Magíster en Ciencias del Diseño</span>
+        <h1>Matías&nbsp;Pezoa</h1>
+        <p class="lead">Diseño, moda, tecnología y fabricación&nbsp;digital.</p>
       </div>
-      <p class="caption">Arrastra para orbitar · GAGA.glb</p>
+
+      <div class="obs specimen-field">
+        <svg class="obs-lines" aria-hidden="true"></svg>
+
+        <figure class="obs-frame obs-main" data-crop-source data-parallax>
+          <img src="assets/images/PERFIL.jpeg" alt="Retrato de Matías Pezoa" loading="eager">
+          <div class="obs-meta">
+            <span class="dim" data-dims>—</span>
+            <span class="ref">ESPÉCIMEN — PERFIL</span>
+          </div>
+          <span class="obs-marker marker-1" data-link="1"><span>01</span></span>
+          <span class="obs-marker marker-2" data-link="2"><span>02</span></span>
+        </figure>
+
+        <figure class="obs-frame crop-1" data-link="1" data-parallax>
+          <div class="obs-crop-media"></div>
+          <div class="obs-meta">
+            <span class="dim">01</span>
+            <span class="ref">DETALLE — SUP.</span>
+          </div>
+        </figure>
+
+        <figure class="obs-frame crop-2" data-link="2" data-parallax>
+          <div class="obs-crop-media"></div>
+          <div class="obs-meta">
+            <span class="dim">02</span>
+            <span class="ref">DETALLE — INF.</span>
+          </div>
+        </figure>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Links</h2>
-      <ul class="links">
-        <li><a href="https://www.linkedin.com/in/matias-pezoa-a1532b12a/" rel="noopener">LinkedIn <span aria-hidden="true">→</span></a></li>
-        <li><a href="https://www.instagram.com/m4.t1" rel="noopener">Instagram <span aria-hidden="true">→</span></a></li>
-      </ul>
-    </section>
+    <div class="page">
+
+      <!-- PERFIL -->
+      <section class="record record-perfil reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 002</span>
+          <span class="record-title">Perfil</span>
+        </div>
+        <div class="record-body">
+          <dl>
+            <dt>Disciplina / formación</dt>
+            <dd>Diseño Industrial + Magíster en Ciencias del Diseño.</dd>
+            <dt>Qué hago hoy</dt>
+            <dd>Trabajo como diseñador y docente universitario, especializado en la intersección entre moda, tecnología y fabricación digital. Desarrollo proyectos que integran diseño, procesos de fabricación y herramientas computacionales aplicadas al cuerpo y al vestuario.</dd>
+            <dt>Qué me gustaría aprender en este curso</dt>
+            <dd>Cómo utilizar sistemas digitales y computacionales para expandir los procesos de diseño de moda, conectando cuerpo, geometría, materialidad, fabricación e interacción.</dd>
+          </dl>
+        </div>
+      </section>
+
+      <!-- INTERESES -->
+      <section class="record record-intereses reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 003</span>
+          <span class="record-title">Intereses</span>
+        </div>
+        <div class="record-body">
+          <ul class="tags">
+            <li><span class="idx">01</span>Diseño computacional</li>
+            <li><span class="idx">02</span>Moda y tecnología</li>
+            <li><span class="idx">03</span>Fabricación digital</li>
+            <li><span class="idx">04</span>Diseño paramétrico</li>
+            <li><span class="idx">05</span>Wearables e interacción</li>
+            <li><span class="idx">06</span>Materiales y experimentación</li>
+            <li><span class="idx">07</span>Inteligencia artificial aplicada al diseño</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- PREGUNTA -->
+      <section class="record record-pregunta reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 004</span>
+          <span class="record-title">Pregunta de investigación</span>
+        </div>
+        <div class="record-body">
+          <span class="pull-mark">Hipótesis de trabajo —</span>
+          <p class="pull">¿Cómo puede el diseño computacional transformar la relación entre cuerpo, material y fabricación para generar nuevas formas de diseñar y producir indumentaria?</p>
+        </div>
+      </section>
+
+      <!-- INSPIRACIÓN -->
+      <section class="record record-inspiracion reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 005</span>
+          <span class="record-title">Referencia</span>
+        </div>
+        <div class="record-body">
+          <p>Los proyectos donde la tecnología no funciona únicamente como una herramienta para fabricar una forma previamente diseñada, sino como parte activa del proceso de diseño, permitiendo que el cuerpo, los materiales, los datos y los sistemas de fabricación participen en la generación del resultado.</p>
+
+          <div class="obs">
+            <svg class="obs-lines" aria-hidden="true"></svg>
+            <figure class="obs-frame insp-main" data-crop-source data-parallax>
+              <img src="assets/images/Hungry.jpg" alt="Imagen de referencia del proceso de diseño de Matías Pezoa" loading="lazy">
+              <div class="obs-meta">
+                <span class="dim" data-dims>—</span>
+                <span class="ref">REF. — CAPTURA</span>
+              </div>
+              <span class="obs-marker insp-marker" data-link="3"><span>03</span></span>
+            </figure>
+            <figure class="obs-frame insp-crop" data-link="3" data-parallax>
+              <div class="obs-crop-media"></div>
+              <div class="obs-meta">
+                <span class="dim">03</span>
+                <span class="ref">DETALLE</span>
+              </div>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- MODELO 3D -->
+      <section class="record record-modelo reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 006</span>
+          <span class="record-title">Modelo 3D</span>
+        </div>
+        <div class="record-body">
+          <div class="obs-frame model-frame" data-parallax>
+            <model-viewer
+              class="model"
+              src="assets/models/GAGA.glb"
+              alt="Modelo 3D GAGA de Matías Pezoa"
+              camera-controls
+              touch-action="pan-y"
+              auto-rotate
+              shadow-intensity="1"
+              exposure="1">
+            </model-viewer>
+            <div class="obs-meta">
+              <span class="dim">GAGA.GLB — 41 MB</span>
+              <span class="ref">Arrastrar para orbitar</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- LABORATORIOS -->
+      <section class="record record-links reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 007</span>
+          <span class="record-title">Laboratorios</span>
+        </div>
+        <div class="record-body">
+          <ul class="links">
+            <li><a href="lab-02/"><span><span class="idx">01</span>Lab 02 — VRTG</span><span class="arrow" aria-hidden="true">→</span></a></li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- LINKS -->
+      <section class="record record-links reveal">
+        <div class="record-head">
+          <span class="record-index">Registro 008</span>
+          <span class="record-title">Contacto</span>
+        </div>
+        <div class="record-body">
+          <ul class="links">
+            <li><a href="https://www.linkedin.com/in/matias-pezoa-a1532b12a/" rel="noopener"><span><span class="idx">01</span>LinkedIn</span><span class="arrow" aria-hidden="true">→</span></a></li>
+            <li><a href="https://www.instagram.com/m4.t1" rel="noopener"><span><span class="idx">02</span>Instagram</span><span class="arrow" aria-hidden="true">→</span></a></li>
+          </ul>
+        </div>
+      </section>
+
+    </div>
   </main>
 
+  <footer class="archive-footer">
+    <span>Matías Pezoa — Computación Avanzada 2026</span>
+    <span>Archivo público — GitHub Pages</span>
+  </footer>
+
   <script>
-    document.querySelectorAll('.card').forEach(function (card) {
-      card.addEventListener('pointermove', function (e) {
-        var r = card.getBoundingClientRect();
-        card.style.setProperty('--mx', ((e.clientX - r.left) / r.width * 100) + '%');
-        card.style.setProperty('--my', ((e.clientY - r.top) / r.height * 100) + '%');
+    // ---- custom cursor (solo en dispositivos con puntero fino) ----
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      var cur = document.querySelector('.cursor');
+      document.body.classList.add('cursor-active');
+      window.addEventListener('pointermove', function (e) {
+        cur.style.left = e.clientX + 'px';
+        cur.style.top = e.clientY + 'px';
+      });
+    }
+
+    // ---- metadata: dimensiones reales de las imágenes ----
+    document.querySelectorAll('[data-dims]').forEach(function (el) {
+      var img = el.closest('.obs-frame').querySelector('img');
+      function set() { el.textContent = img.naturalWidth + ' × ' + img.naturalHeight; }
+      if (img.complete && img.naturalWidth) set();
+      else img.addEventListener('load', set);
+    });
+
+    // ---- crops: usar la misma imagen como fondo ampliado ----
+    document.querySelectorAll('.obs').forEach(function (obs) {
+      var source = obs.querySelector('[data-crop-source] img');
+      if (!source) return;
+      obs.querySelectorAll('.obs-crop-media').forEach(function (media) {
+        media.style.setProperty('--img', 'url(' + source.getAttribute('src') + ')');
       });
     });
+
+    // ---- líneas de conexión entre marcadores y ampliaciones ----
+    var isDesktop = window.matchMedia('(min-width:901px)');
+
+    function anchor(rect, containerRect, dirX, dirY) {
+      var x = dirX === -1 ? rect.left : dirX === 1 ? rect.right : rect.left + rect.width / 2;
+      var y = dirY === -1 ? rect.top : dirY === 1 ? rect.bottom : rect.top + rect.height / 2;
+      return { x: x - containerRect.left, y: y - containerRect.top };
+    }
+
+    // reconstruye los <path> de un .obs; si ya fue revelado, los deja visibles
+    // de inmediato (sin repetir la animación de trazado en cada resize)
+    function buildPaths(obs) {
+      var svg = obs.querySelector('.obs-lines');
+      if (!svg) return;
+      var containerRect = obs.getBoundingClientRect();
+      svg.setAttribute('width', containerRect.width);
+      svg.setAttribute('height', containerRect.height);
+      svg.innerHTML = '';
+
+      var revealed = obs.dataset.revealed === '1';
+
+      obs.querySelectorAll('.obs-marker[data-link]').forEach(function (marker) {
+        var link = marker.getAttribute('data-link');
+        var crop = obs.querySelector('.obs-frame[data-link="' + link + '"]');
+        if (!crop) return;
+
+        var mRect = marker.getBoundingClientRect();
+        var cRect = crop.getBoundingClientRect();
+        var mCenter = { x: mRect.left + mRect.width / 2, y: mRect.top + mRect.height / 2 };
+        var cCenter = { x: cRect.left + cRect.width / 2, y: cRect.top + cRect.height / 2 };
+        var dx = cCenter.x - mCenter.x, dy = cCenter.y - mCenter.y;
+        var signX = dx === 0 ? 0 : (dx > 0 ? 1 : -1);
+        var signY = dy === 0 ? 0 : (dy > 0 ? 1 : -1);
+
+        var p1 = anchor(mRect, containerRect, signX, signY);
+        var p2 = anchor(cRect, containerRect, -signX, -signY);
+
+        var path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        path.setAttribute('d', 'M ' + p1.x + ' ' + p1.y + ' L ' + p2.x + ' ' + p2.y);
+        svg.appendChild(path);
+
+        var len = path.getTotalLength();
+        path.style.strokeDasharray = len;
+        path.style.strokeDashoffset = revealed ? 0 : len;
+      });
+    }
+
+    function drawConnectors() {
+      if (!isDesktop.matches) return;
+      document.querySelectorAll('.obs').forEach(buildPaths);
+    }
+
+    // ---- los módulos se desplazan bastante y al azar por el espacio ----
+    var parallaxEls = document.querySelectorAll('[data-parallax]');
+    var reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    // cada módulo recibe, una sola vez, una velocidad y dirección propias
+    // y aleatorias en X y en Y — así cada uno recorre una trayectoria distinta
+    function assignRandomFactors() {
+      parallaxEls.forEach(function (el) {
+        if (el.dataset.fy) return;
+        var signY = Math.random() < .5 ? -1 : 1;
+        var signX = Math.random() < .5 ? -1 : 1;
+        el.dataset.fy = signY * (.35 + Math.random() * .65);
+        el.dataset.fx = signX * (.15 + Math.random() * .4);
+      });
+    }
+
+    // guarda la posición "natural" (sin transform) de cada módulo, para
+    // poder calcular su desplazamiento sin que este se retroalimente
+    function capturePositions() {
+      parallaxEls.forEach(function (el) { el.style.transform = 'none'; });
+      parallaxEls.forEach(function (el) {
+        var rect = el.getBoundingClientRect();
+        el.dataset.naturalTop = rect.top + window.scrollY;
+        el.dataset.naturalH = rect.height;
+      });
+    }
+
+    var MAX_DRIFT = 340;
+    function clampDrift(v) { return Math.max(-MAX_DRIFT, Math.min(MAX_DRIFT, v)); }
+
+    function applyParallax() {
+      if (!parallaxEls.length || !isDesktop.matches || reduceMotion) return;
+      var vh = window.innerHeight, scrollY = window.scrollY;
+      parallaxEls.forEach(function (el) {
+        var top = parseFloat(el.dataset.naturalTop) - scrollY;
+        var center = top + parseFloat(el.dataset.naturalH) / 2;
+        var drive = center - vh / 2;
+        var offsetY = clampDrift(drive * parseFloat(el.dataset.fy));
+        var offsetX = clampDrift(drive * parseFloat(el.dataset.fx));
+        el.style.transform = 'translate(' + offsetX.toFixed(1) + 'px,' + offsetY.toFixed(1) + 'px)';
+      });
+    }
+
+    function updateOnFrame() {
+      applyParallax();
+      drawConnectors(); // las líneas se recalculan contra la posición ya desplazada
+    }
+
+    var resizeTimer;
+    window.addEventListener('resize', function () {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(function () {
+        capturePositions();
+        updateOnFrame();
+      }, 150);
+    });
+
+    var scrollTicking = false;
+    window.addEventListener('scroll', function () {
+      if (scrollTicking) return;
+      scrollTicking = true;
+      requestAnimationFrame(function () {
+        updateOnFrame();
+        scrollTicking = false;
+      });
+    }, { passive: true });
+
+    window.addEventListener('load', function () {
+      capturePositions();
+      updateOnFrame();
+    });
+    assignRandomFactors();
+    capturePositions();
+    updateOnFrame();
+
+    // ---- revelado al hacer scroll ----
+    if ('IntersectionObserver' in window) {
+      var lineObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (!entry.isIntersecting) return;
+          var obs = entry.target;
+          obs.dataset.revealed = '1';
+          obs.querySelectorAll('.obs-lines path').forEach(function (path, i) {
+            setTimeout(function () {
+              path.style.transition = 'stroke-dashoffset .5s ease-out';
+              path.style.strokeDashoffset = 0;
+            }, i * 120);
+          });
+          lineObserver.unobserve(obs);
+        });
+      }, { threshold: .4 });
+
+      var revealObserver = new IntersectionObserver(function (entries) {
+        entries.forEach(function (entry) {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in-view');
+            revealObserver.unobserve(entry.target);
+          }
+        });
+      }, { threshold: .15 });
+
+      document.querySelectorAll('.record').forEach(function (r) { revealObserver.observe(r); });
+      document.querySelectorAll('.obs').forEach(function (o) { lineObserver.observe(o); });
+    }
   </script>
 </body>
 </html>

@@ -1,4 +1,4 @@
-# Real—Real Field
+# VRTG
 
 Guía para **Clase 02 — Computación Avanzada**
 Magíster en Ciencias del Diseño · Universidad Adolfo Ibáñez

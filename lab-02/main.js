@@ -8,6 +8,7 @@ import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 const valoresIniciales = {
   resolucion: 300,
   tamanioParticula: 0.035,
+  espaciado: 1.0,
   profundidad: 2.5,
   especularidad: 0.6,
   saturacion: 1.0,
@@ -136,7 +137,6 @@ let imagenActual = null;
 let datosImagenActual = null;
 let columnasImagen = 0;
 let filasImagen = 0;
-let paletaActual = [];
 
 // espejo=true invierte horizontalmente (la cámara frontal se ve mejor en
 // espejo, como un espejo real); las imágenes subidas nunca lo usan.
@@ -165,7 +165,6 @@ function muestrearFuente(fuente, ancho, alto, resolucion, espejo = false) {
   }
 
   datosImagenActual = contextoMuestreo.getImageData(0, 0, columnasImagen, filasImagen).data;
-  paletaActual = extraerPaleta();
 }
 
 function procesarImagen(imagenElement) {
@@ -178,7 +177,6 @@ function usarImagenLista(imagen) {
   imagenActual = imagen;
   procesarImagen(imagenActual);
   generarCampo();
-  actualizarPaletaUI();
   mensajeInicial.classList.add("oculto");
 }
 
@@ -300,7 +298,6 @@ function actualizarCampoEnVivo(tiempo) {
   const resolucionEnVivo = Math.min(parametros.resolucion, RESOLUCION_MAXIMA_TIEMPO_REAL);
   muestrearFuente(videoCamara, videoCamara.videoWidth, videoCamara.videoHeight, resolucionEnVivo, true);
   generarCampo();
-  actualizarPaletaUI();
 }
 
 // ======================================================
@@ -433,7 +430,7 @@ function ruidoOrganico(x, y, semilla) {
 // brillo del píxel → profundidad (relieve); posición en el plano → ruido
 // orgánico en X, Y y Z — pliegues y desgarros continuos, no bandas rectas.
 function calcularProfundidadYDistorsion(px, py, brillo) {
-  let z = (brillo - 0.5) * parametros.profundidad;
+  let z = (0.5 - brillo) * parametros.profundidad; // invertido: lo oscuro sobresale, lo claro se hunde
 
   const escalaRuido = 0.35;
   const semilla = parametros.glitchSemilla;
@@ -457,12 +454,18 @@ function generarCampo() {
   if (!datosImagenActual) return;
 
   const anchoEscena = 12; // unidades de escena que ocupa el eje mayor de la imagen
-  const escala = anchoEscena / Math.max(columnasImagen, filasImagen);
+  const escala = (anchoEscena / Math.max(columnasImagen, filasImagen)) * parametros.espaciado;
 
   const desplazamientosGlitch = generarDesplazamientosGlitch(filasImagen);
 
   const posiciones = geometriaParticulas.attributes.position.array;
   const colores = geometriaParticulas.attributes.color.array;
+
+  // Paleta HUD: se acumula con los mismos colores ya procesados (Regla B) que
+  // terminan en cada partícula, así siempre refleja la composición real en
+  // pantalla — modo "Colores personalizados", saturación, especularidad y
+  // separación de canal por glitch incluidos — y no el archivo original.
+  const acumuladorPaleta = crearAcumuladorPaleta();
 
   let indiceParticula = 0;
 
@@ -513,6 +516,8 @@ function generarCampo() {
       colores[i3 + 1] = color.g;
       colores[i3 + 2] = color.b;
 
+      acumularColorPaleta(acumuladorPaleta, col, color);
+
       indiceParticula++;
     }
   }
@@ -524,6 +529,8 @@ function generarCampo() {
   geometriaParticulas.setDrawRange(0, totalParticulasActivas);
 
   materialParticulas.size = parametros.tamanioParticula;
+
+  actualizarPaletaUI(resolverPaleta(acumuladorPaleta));
 }
 
 // ======================================================
@@ -671,30 +678,46 @@ function aplicarMovimientoAudio(tiempo) {
 // ======================================================
 // 09 — PALETA CROMÁTICA
 // ======================================================
-// Promedia el color de cinco franjas verticales de la imagen ya
-// muestreada: una paleta representativa y barata de calcular.
+// Promedia, en cinco franjas verticales, el color que cada partícula
+// termina teniendo en pantalla (Regla B ya aplicada) — no el píxel crudo
+// del archivo — para que el HUD siempre muestre la paleta real de la
+// composición: modo "Colores personalizados", saturación, especularidad
+// y separación de canal por glitch quedan reflejados ahí también.
 
-function extraerPaleta(cantidad = 5) {
+const CANTIDAD_COLORES_PALETA = 5;
+
+function crearAcumuladorPaleta() {
+  return {
+    r: new Float64Array(CANTIDAD_COLORES_PALETA),
+    g: new Float64Array(CANTIDAD_COLORES_PALETA),
+    b: new Float64Array(CANTIDAD_COLORES_PALETA),
+    contador: new Uint32Array(CANTIDAD_COLORES_PALETA),
+  };
+}
+
+function acumularColorPaleta(acumulador, col, color) {
+  const franja = Math.min(
+    CANTIDAD_COLORES_PALETA - 1,
+    Math.floor((col / columnasImagen) * CANTIDAD_COLORES_PALETA)
+  );
+
+  acumulador.r[franja] += color.r;
+  acumulador.g[franja] += color.g;
+  acumulador.b[franja] += color.b;
+  acumulador.contador[franja]++;
+}
+
+function resolverPaleta(acumulador) {
   const paleta = [];
-  const paso = Math.max(1, Math.floor(filasImagen / 20));
 
-  for (let i = 0; i < cantidad; i++) {
-    const col = Math.min(columnasImagen - 1, Math.floor(((i + 0.5) / cantidad) * columnasImagen));
-
-    let r = 0, g = 0, b = 0, contador = 0;
-
-    for (let fila = 0; fila < filasImagen; fila += paso) {
-      const indice = (fila * columnasImagen + col) * 4;
-      r += datosImagenActual[indice];
-      g += datosImagenActual[indice + 1];
-      b += datosImagenActual[indice + 2];
-      contador++;
-    }
+  for (let i = 0; i < CANTIDAD_COLORES_PALETA; i++) {
+    const contador = acumulador.contador[i];
+    if (contador === 0) continue; // franja sin partículas (p. ej. imagen muy angosta)
 
     paleta.push({
-      r: Math.round(r / contador),
-      g: Math.round(g / contador),
-      b: Math.round(b / contador),
+      r: Math.round((acumulador.r[i] / contador) * 255),
+      g: Math.round((acumulador.g[i] / contador) * 255),
+      b: Math.round((acumulador.b[i] / contador) * 255),
     });
   }
 
@@ -706,10 +729,10 @@ function rgbAHex(r, g, b) {
   return `#${componente(r)}${componente(g)}${componente(b)}`.toUpperCase();
 }
 
-function actualizarPaletaUI() {
+function actualizarPaletaUI(paleta) {
   hudPaleta.innerHTML = "";
 
-  paletaActual.forEach(({ r, g, b }) => {
+  paleta.forEach(({ r, g, b }) => {
     const hex = rgbAHex(r, g, b);
 
     const item = document.createElement("div");
@@ -737,6 +760,7 @@ const parametrosEnteros = ["resolucion"];
 const controles = {
   resolucion: document.querySelector("#resolucion"),
   tamanioParticula: document.querySelector("#tamanio-particula"),
+  espaciado: document.querySelector("#espaciado"),
   profundidad: document.querySelector("#profundidad"),
   especularidad: document.querySelector("#especularidad"),
   saturacion: document.querySelector("#saturacion"),
@@ -748,6 +772,7 @@ const controles = {
 const valoresVisibles = {
   resolucion: document.querySelector("#resolucion-valor"),
   tamanioParticula: document.querySelector("#tamanio-particula-valor"),
+  espaciado: document.querySelector("#espaciado-valor"),
   profundidad: document.querySelector("#profundidad-valor"),
   especularidad: document.querySelector("#especularidad-valor"),
   saturacion: document.querySelector("#saturacion-valor"),
@@ -792,7 +817,6 @@ function actualizarParametro(nombre, valor) {
 
   if (nombre === "resolucion" && imagenActual) {
     procesarImagen(imagenActual);
-    actualizarPaletaUI();
   }
 
   generarCampo();
@@ -865,7 +889,6 @@ document.querySelector("#restablecer").addEventListener("click", () => {
 
   if (imagenActual) {
     procesarImagen(imagenActual);
-    actualizarPaletaUI();
   }
 
   generarCampo();
