@@ -22,7 +22,7 @@
       <div id="viewport"></div>
 
       <div class="hint">
-        Arrastra para orbitar · Rueda para acercar · Click derecho para desplazar
+        Arrastra para orbitar · Rueda para acercar · Click derecho para desplazar · Click izquierdo en el suelo para ubicar el atractor
       </div>
     </section>
 
@@ -89,6 +89,68 @@
           <span>Semilla</span>
           <output id="semilla-valor">42</output>
           <input id="semilla" type="range" min="1" max="100" step="1" value="42" />
+        </label>
+      </section>
+
+      <section class="control-group">
+        <h3>Atractor</h3>
+
+        <p class="panel-hint">
+          Click izquierdo en el suelo para ubicar el punto atractor.
+        </p>
+
+        <label>
+          <span>Activo</span>
+          <input id="atractor-activo" type="checkbox" />
+        </label>
+
+        <label>
+          <span>Posición</span>
+          <output id="atractor-posicion">x 0.00 · z 0.00</output>
+        </label>
+
+        <label>
+          <span>Fuerza</span>
+          <output id="atractor-fuerza-valor">3.00</output>
+          <input id="atractor-fuerza" type="range" min="0" max="8" step="0.1" value="3" />
+        </label>
+
+        <label>
+          <span>Radio</span>
+          <output id="atractor-radio-valor">6.00</output>
+          <input id="atractor-radio" type="range" min="1" max="15" step="0.5" value="6" />
+        </label>
+
+        <label>
+          <span>Frecuencia onda</span>
+          <output id="atractor-frecuencia-valor">0.60</output>
+          <input id="atractor-frecuencia" type="range" min="0" max="2" step="0.05" value="0.6" />
+        </label>
+
+        <label>
+          <span>Color</span>
+          <input id="atractor-color" type="color" value="#ff5a3c" />
+        </label>
+      </section>
+
+      <section class="control-group">
+        <h3>Micrófono</h3>
+
+        <p class="panel-hint">
+          Activa el micrófono para que el volumen mueva los módulos en vertical.
+        </p>
+
+        <div class="microfono-fila">
+          <button id="microfono-activar" type="button">Activar micrófono</button>
+          <output id="microfono-nivel">0%</output>
+        </div>
+
+        <p id="microfono-estado" class="panel-hint">Micrófono apagado</p>
+
+        <label>
+          <span>Sensibilidad</span>
+          <output id="microfono-fuerza-valor">2.00</output>
+          <input id="microfono-fuerza" type="range" min="0" max="6" step="0.1" value="2" />
         </label>
       </section>
 

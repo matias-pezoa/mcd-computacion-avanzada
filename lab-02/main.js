@@ -14,7 +14,17 @@ const valoresIniciales = {
   rotacion: 0.3,
   aleatoriedad: 0.0,
   semilla: 42,
+  atractorActivo: false,
+  atractorFuerza: 3.0,
+  atractorRadio: 6.0,
+  atractorFrecuencia: 0.6,
+  atractorX: 0,
+  atractorZ: 0,
+  microfonoActivo: false,
+  microfonoFuerza: 2.0,
 };
+
+const colorAtractorInicial = "#ff5a3c";
 
 const parametros = { ...valoresIniciales };
 
@@ -91,13 +101,37 @@ escena.add(grilla);
 const grupoCampo = new THREE.Group();
 escena.add(grupoCampo);
 
-const geometriaModulo = new THREE.BoxGeometry(0.76, 1, 0.76);
+const geometriaModulo = new THREE.SphereGeometry(0.5, 20, 14);
 
 const materialModulo = new THREE.MeshStandardMaterial({
   color: 0xd7d2c8,
   roughness: 0.58,
   metalness: 0.03,
 });
+
+// Color que tiñe los módulos dentro del radio de influencia del atractor.
+let colorAtractor = new THREE.Color(colorAtractorInicial);
+
+// Marcador visual de la posición del punto atractor.
+const marcadorAtractor = new THREE.Mesh(
+  new THREE.SphereGeometry(0.35, 20, 20),
+  new THREE.MeshStandardMaterial({
+    color: colorAtractor,
+    emissive: colorAtractor,
+    emissiveIntensity: 0.6,
+    roughness: 0.3,
+  })
+);
+marcadorAtractor.position.set(0, 0.35, 0);
+marcadorAtractor.visible = false;
+escena.add(marcadorAtractor);
+
+function actualizarMarcadorAtractor() {
+  marcadorAtractor.visible = parametros.atractorActivo;
+  marcadorAtractor.position.set(parametros.atractorX, 0.35, parametros.atractorZ);
+  marcadorAtractor.material.color.copy(colorAtractor);
+  marcadorAtractor.material.emissive.copy(colorAtractor);
+}
 
 // ======================================================
 // 04 — REGLAS GENERATIVAS
@@ -106,19 +140,31 @@ const materialModulo = new THREE.MeshStandardMaterial({
 // Si cambian estas reglas, cambia la familia de resultados.
 
 // Regla A:
-// posición → distancia al centro → onda → altura
-function calcularAlturaModulo(x, z) {
-  const distancia = Math.sqrt(x * x + z * z);
+// posición → distancia al origen de onda → onda → tamaño
+// El origen de la onda y su frecuencia se desplazan hacia el atractor
+// cuando está activo: la onda "nace" en el punto atractor y se
+// vuelve más rápida cerca de él.
+function calcularAlturaModulo(x, z, influenciaAtractor) {
+  const origenOnda = parametros.atractorActivo
+    ? { x: parametros.atractorX, z: parametros.atractorZ }
+    : { x: 0, z: 0 };
 
-  const onda =
-    Math.sin(distancia * parametros.frecuencia) *
-    parametros.amplitud;
+  const dxOnda = x - origenOnda.x;
+  const dzOnda = z - origenOnda.z;
+  const distancia = Math.sqrt(dxOnda * dxOnda + dzOnda * dzOnda);
+
+  const frecuenciaEfectiva =
+    parametros.frecuencia + influenciaAtractor * parametros.atractorFrecuencia;
+
+  const onda = Math.sin(distancia * frecuenciaEfectiva) * parametros.amplitud;
 
   const ruido =
     aleatoriedadConSemilla(x, z, parametros.semilla) *
     parametros.aleatoriedad;
 
-  return Math.max(0.25, 1.2 + onda + ruido);
+  const empuje = influenciaAtractor * parametros.atractorFuerza;
+
+  return Math.max(0.25, 1.2 + onda + ruido + empuje);
 }
 
 // Regla B:
@@ -126,6 +172,22 @@ function calcularAlturaModulo(x, z) {
 function calcularRotacionModulo(x, z) {
   const direccion = Math.atan2(z, x);
   return direccion * parametros.rotacion;
+}
+
+// Regla C:
+// posición → distancia al punto atractor → intensidad (0..1).
+// Esta intensidad se usa luego para elevar y teñir los módulos cercanos.
+function calcularInfluenciaAtractor(x, z) {
+  if (!parametros.atractorActivo) return 0;
+
+  const dx = x - parametros.atractorX;
+  const dz = z - parametros.atractorZ;
+  const distancia = Math.sqrt(dx * dx + dz * dz);
+
+  const caida = Math.max(0, 1 - distancia / parametros.atractorRadio);
+
+  // Se eleva al cuadrado para suavizar el borde del área de influencia.
+  return caida * caida;
 }
 
 // ======================================================
@@ -143,17 +205,35 @@ function generarCampo() {
       const x = columna * parametros.separacion - ancho / 2;
       const z = fila * parametros.separacion - profundidad / 2;
 
-      const altura = calcularAlturaModulo(x, z);
+      const influenciaAtractor = calcularInfluenciaAtractor(x, z);
+      const altura = calcularAlturaModulo(x, z, influenciaAtractor);
       const rotacion = calcularRotacionModulo(x, z);
 
       const modulo = new THREE.Mesh(geometriaModulo, materialModulo);
 
-      // Escalamos solo en Y para modificar la altura.
-      modulo.scale.y = altura;
+      // Los módulos dentro del radio del atractor reciben un material propio
+      // teñido hacia el color del atractor; el resto comparte el material base.
+      if (influenciaAtractor > 0) {
+        modulo.material = new THREE.MeshStandardMaterial({
+          color: materialModulo.color.clone().lerp(colorAtractor, influenciaAtractor),
+          roughness: 0.58,
+          metalness: 0.03,
+        });
+      }
 
-      // BoxGeometry crece hacia arriba y hacia abajo desde su centro.
-      // Por eso elevamos el módulo la mitad de su altura.
-      modulo.position.set(x, altura / 2, z);
+      // Escalamos en las tres dimensiones: el "tamaño" de la esfera
+      // reemplaza a la altura de la barra original.
+      modulo.scale.setScalar(altura);
+
+      // La esfera crece desde su centro en todas direcciones.
+      // Por eso la elevamos la mitad de su tamaño para que apoye en el suelo.
+      const yBase = altura / 2;
+      modulo.position.set(x, yBase, z);
+
+      // Guardamos la posición de reposo y una fase propia: el micrófono
+      // desplaza cada módulo verticalmente a partir de estos valores.
+      modulo.userData.yBase = yBase;
+      modulo.userData.fase = (x + z) * 0.6;
 
       modulo.rotation.y = rotacion;
       modulo.castShadow = true;
@@ -190,6 +270,153 @@ function aleatoriedadConSemilla(x, z, semilla) {
 }
 
 // ======================================================
+// 06B — ATRACTOR: UBICACIÓN POR CLICK
+// ======================================================
+// Un click sobre el suelo proyecta un rayo desde la cámara y calcula
+// dónde cruza el plano y=0. Ese punto pasa a ser el atractor.
+
+const raycaster = new THREE.Raycaster();
+const planoSuelo = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const puntoInterseccion = new THREE.Vector3();
+let inicioPuntero = null;
+
+function obtenerCoordenadasNormalizadas(evento) {
+  const rect = renderer.domElement.getBoundingClientRect();
+
+  return new THREE.Vector2(
+    ((evento.clientX - rect.left) / rect.width) * 2 - 1,
+    -((evento.clientY - rect.top) / rect.height) * 2 + 1
+  );
+}
+
+renderer.domElement.addEventListener("pointerdown", (evento) => {
+  // Solo el click izquierdo ubica el atractor; el derecho desplaza la cámara.
+  if (evento.button !== 0) return;
+
+  inicioPuntero = { x: evento.clientX, y: evento.clientY };
+});
+
+renderer.domElement.addEventListener("pointerup", (evento) => {
+  if (!inicioPuntero) return;
+
+  const distanciaArrastre = Math.hypot(
+    evento.clientX - inicioPuntero.x,
+    evento.clientY - inicioPuntero.y
+  );
+
+  inicioPuntero = null;
+
+  // Si el puntero se movió lo suficiente, fue un arrastre de cámara
+  // (OrbitControls), no un intento de ubicar el atractor.
+  if (distanciaArrastre > 4) return;
+
+  raycaster.setFromCamera(obtenerCoordenadasNormalizadas(evento), camara);
+
+  if (!raycaster.ray.intersectPlane(planoSuelo, puntoInterseccion)) return;
+
+  parametros.atractorX = puntoInterseccion.x;
+  parametros.atractorZ = puntoInterseccion.z;
+  parametros.atractorActivo = true;
+
+  controlAtractorActivo.checked = true;
+  actualizarPosicionAtractorUI();
+  actualizarMarcadorAtractor();
+  generarCampo();
+});
+
+// ======================================================
+// 06C — MICRÓFONO: MOVIMIENTO VERTICAL
+// ======================================================
+// El volumen del micrófono controla cuánto "flotan" los módulos.
+// Cada módulo tiene su propia fase, así el movimiento se ve como
+// una ola que recorre el campo en lugar de un salto rígido.
+
+let flujoMicrofono = null;
+let analizadorMicrofono = null;
+let datosMicrofono = null;
+let nivelMicrofono = 0;
+
+async function activarMicrofono() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    // Ocurre en contextos no seguros: abrir index.html con file:// en vez
+    // de servirlo desde http://localhost (Live Server u otro servidor).
+    salidaMicrofonoEstado.textContent =
+      "El navegador bloqueó el micrófono: abre el proyecto con un servidor local (http://localhost), no con file://";
+    return;
+  }
+
+  try {
+    flujoMicrofono = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+    const contextoAudio = new (window.AudioContext || window.webkitAudioContext)();
+    if (contextoAudio.state === "suspended") await contextoAudio.resume();
+
+    const fuente = contextoAudio.createMediaStreamSource(flujoMicrofono);
+
+    analizadorMicrofono = contextoAudio.createAnalyser();
+    analizadorMicrofono.fftSize = 256;
+    datosMicrofono = new Uint8Array(analizadorMicrofono.frequencyBinCount);
+
+    fuente.connect(analizadorMicrofono);
+
+    parametros.microfonoActivo = true;
+    controlMicrofonoActivar.textContent = "Detener micrófono";
+    salidaMicrofonoEstado.textContent = "Escuchando…";
+  } catch (error) {
+    console.error("Error al activar el micrófono:", error);
+
+    const mensajes = {
+      NotAllowedError: "Permiso denegado. Habilita el micrófono para este sitio en el navegador.",
+      NotFoundError: "No se encontró ningún micrófono conectado.",
+      NotReadableError: "El micrófono está siendo usado por otra aplicación.",
+    };
+
+    salidaMicrofonoEstado.textContent =
+      mensajes[error.name] || `No se pudo acceder al micrófono (${error.name || error.message})`;
+  }
+}
+
+function detenerMicrofono() {
+  parametros.microfonoActivo = false;
+  nivelMicrofono = 0;
+
+  if (flujoMicrofono) {
+    flujoMicrofono.getTracks().forEach((pista) => pista.stop());
+    flujoMicrofono = null;
+  }
+
+  analizadorMicrofono = null;
+  datosMicrofono = null;
+
+  controlMicrofonoActivar.textContent = "Activar micrófono";
+  salidaMicrofonoEstado.textContent = "Micrófono apagado";
+  salidaMicrofonoNivel.value = "0%";
+}
+
+function actualizarNivelMicrofono() {
+  if (!parametros.microfonoActivo || !analizadorMicrofono) return;
+
+  analizadorMicrofono.getByteFrequencyData(datosMicrofono);
+
+  let suma = 0;
+  for (let i = 0; i < datosMicrofono.length; i++) {
+    suma += datosMicrofono[i];
+  }
+
+  nivelMicrofono = suma / datosMicrofono.length / 255;
+  salidaMicrofonoNivel.value = `${Math.round(nivelMicrofono * 100)}%`;
+}
+
+function aplicarMovimientoMicrofono(tiempo) {
+  grupoCampo.children.forEach((modulo) => {
+    const oscilacion = (Math.sin(tiempo * 6 + modulo.userData.fase) + 1) / 2;
+    const empujeMicrofono = nivelMicrofono * parametros.microfonoFuerza * oscilacion;
+
+    modulo.position.y = modulo.userData.yBase + empujeMicrofono;
+  });
+}
+
+// ======================================================
 // 07 — INTERFAZ
 // ======================================================
 
@@ -202,6 +429,10 @@ const controles = {
   rotacion: document.querySelector("#rotacion"),
   aleatoriedad: document.querySelector("#aleatoriedad"),
   semilla: document.querySelector("#semilla"),
+  atractorFuerza: document.querySelector("#atractor-fuerza"),
+  atractorRadio: document.querySelector("#atractor-radio"),
+  atractorFrecuencia: document.querySelector("#atractor-frecuencia"),
+  microfonoFuerza: document.querySelector("#microfono-fuerza"),
 };
 
 const valoresVisibles = {
@@ -213,7 +444,24 @@ const valoresVisibles = {
   rotacion: document.querySelector("#rotacion-valor"),
   aleatoriedad: document.querySelector("#aleatoriedad-valor"),
   semilla: document.querySelector("#semilla-valor"),
+  atractorFuerza: document.querySelector("#atractor-fuerza-valor"),
+  atractorRadio: document.querySelector("#atractor-radio-valor"),
+  atractorFrecuencia: document.querySelector("#atractor-frecuencia-valor"),
+  microfonoFuerza: document.querySelector("#microfono-fuerza-valor"),
 };
+
+const controlAtractorActivo = document.querySelector("#atractor-activo");
+const controlAtractorColor = document.querySelector("#atractor-color");
+const salidaAtractorPosicion = document.querySelector("#atractor-posicion");
+
+const controlMicrofonoActivar = document.querySelector("#microfono-activar");
+const salidaMicrofonoEstado = document.querySelector("#microfono-estado");
+const salidaMicrofonoNivel = document.querySelector("#microfono-nivel");
+
+function actualizarPosicionAtractorUI() {
+  salidaAtractorPosicion.value =
+    `x ${parametros.atractorX.toFixed(2)} · z ${parametros.atractorZ.toFixed(2)}`;
+}
 
 function actualizarParametro(nombre, valor) {
   const parametrosEnteros = ["columnas", "filas", "semilla"];
@@ -233,6 +481,26 @@ Object.entries(controles).forEach(([nombre, control]) => {
   control.addEventListener("input", (event) => {
     actualizarParametro(nombre, event.target.value);
   });
+});
+
+controlAtractorActivo.addEventListener("change", (evento) => {
+  parametros.atractorActivo = evento.target.checked;
+  actualizarMarcadorAtractor();
+  generarCampo();
+});
+
+controlAtractorColor.addEventListener("input", (evento) => {
+  colorAtractor.set(evento.target.value);
+  actualizarMarcadorAtractor();
+  generarCampo();
+});
+
+controlMicrofonoActivar.addEventListener("click", () => {
+  if (parametros.microfonoActivo) {
+    detenerMicrofono();
+  } else {
+    activarMicrofono();
+  }
 });
 
 document.querySelector("#regenerar").addEventListener("click", () => {
@@ -257,6 +525,14 @@ document.querySelector("#restablecer").addEventListener("click", () => {
       : parametros[nombre].toFixed(2);
   });
 
+  controlAtractorActivo.checked = parametros.atractorActivo;
+  colorAtractor.set(colorAtractorInicial);
+  controlAtractorColor.value = colorAtractorInicial;
+  actualizarPosicionAtractorUI();
+  actualizarMarcadorAtractor();
+
+  detenerMicrofono();
+
   generarCampo();
 });
 
@@ -264,8 +540,13 @@ document.querySelector("#restablecer").addEventListener("click", () => {
 // 08 — BUCLE DE ANIMACIÓN
 // ======================================================
 
+const reloj = new THREE.Clock();
+
 function animar() {
   requestAnimationFrame(animar);
+
+  actualizarNivelMicrofono();
+  aplicarMovimientoMicrofono(reloj.getElapsedTime());
 
   controlesOrbita.update();
   renderer.render(escena, camara);
@@ -283,5 +564,7 @@ function ajustarVentana() {
 
 window.addEventListener("resize", ajustarVentana);
 
+actualizarPosicionAtractorUI();
+actualizarMarcadorAtractor();
 generarCampo();
 animar();
