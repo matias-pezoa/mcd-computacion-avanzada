@@ -34,9 +34,9 @@ body{
   mix-blend-mode:screen;
   animation:drift 26s ease-in-out infinite alternate;
 }
-.aurora span:nth-child(1){width:520px;height:520px;background:#33ff00;top:-140px;left:-120px}
-.aurora span:nth-child(2){width:480px;height:480px;background:#ff6200;bottom:-160px;right:-100px;animation-duration:32s;animation-delay:-6s}
-.aurora span:nth-child(3){width:420px;height:420px;background:#ff0080;top:38%;left:55%;animation-duration:22s;animation-delay:-12s}
+.aurora span:nth-child(1){width:520px;height:520px;background:#3b82f6;top:-140px;left:-120px}
+.aurora span:nth-child(2){width:480px;height:480px;background:#a855f7;bottom:-160px;right:-100px;animation-duration:32s;animation-delay:-6s}
+.aurora span:nth-child(3){width:420px;height:420px;background:#ec4899;top:38%;left:55%;animation-duration:22s;animation-delay:-12s}
 
 @keyframes drift{
   0%{transform:translate(0,0) scale(1)}
