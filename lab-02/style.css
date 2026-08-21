@@ -88,15 +88,16 @@ input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);justify-s
 .fila-audio{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
 .fila-audio output{color:var(--text);font-variant-numeric:tabular-nums;font-size:12px}
 
-.actions{padding:22px 0}
-button,.boton-archivo{
+.actions{padding:22px 0;display:flex;flex-direction:column;gap:10px}
+button,.boton-archivo,.boton{
   display:block;width:100%;border:1px solid var(--white);background:var(--white);color:var(--black);
   padding:11px 12px;font:inherit;font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.06em;
-  text-transform:uppercase;text-align:center;cursor:pointer;transition:background-color .15s linear,color .15s linear;
+  text-transform:uppercase;text-align:center;text-decoration:none;cursor:pointer;
+  transition:background-color .15s linear,color .15s linear;
 }
-button:hover,.boton-archivo:hover{background:var(--black);color:var(--white)}
-button.secondary,.boton-archivo{background:transparent;color:var(--text);border-color:var(--line-soft)}
-button.secondary:hover,.boton-archivo:hover{background:var(--white);color:var(--black)}
+button:hover,.boton-archivo:hover,.boton:hover{background:var(--black);color:var(--white)}
+button.secondary,.boton-archivo,.boton.secondary{background:transparent;color:var(--text);border-color:var(--line-soft)}
+button.secondary:hover,.boton-archivo:hover,.boton.secondary:hover{background:var(--white);color:var(--black)}
 .boton-archivo{margin-bottom:10px}
 .boton-camara{margin-bottom:14px}
 
