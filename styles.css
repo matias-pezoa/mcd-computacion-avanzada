@@ -161,7 +161,8 @@ h1{
   margin:0 0 16px;
 }
 .lead{
-  max-width:32ch;
+  max-width:none;
+  white-space:nowrap;
   font-size:15px;
   line-height:1.5;
   color:var(--gray-1);
@@ -395,6 +396,7 @@ a:focus-visible{outline:1px solid var(--white);outline-offset:3px}
   }
 
   .specimen-heading{padding:88px 6vw 0}
+  .lead{white-space:normal}
   .specimen-field{height:auto;padding:0 6vw 60px;display:flex;flex-direction:column;gap:56px}
   .specimen-field .obs-frame{position:static;width:100%;aspect-ratio:1/1}
   .obs-lines{display:none}
