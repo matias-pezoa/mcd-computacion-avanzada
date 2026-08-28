@@ -1,0 +1,664 @@
+:root{
+  --black:#060606;
+  --white:#f4f4f1;
+  --gray-1:#c7c7c2;
+  --gray-2:#8c8c87;
+  --gray-3:#4a4a46;
+  --line:rgba(244,244,241,.82);
+  --line-soft:rgba(244,244,241,.28);
+  --line-faint:rgba(244,244,241,.14);
+
+  --panel-bg:rgba(6,6,6,.9);
+  --cyan:#3fe6d2;
+  --coral:#ff6a52;
+  --violet:#a06bff;
+  --top:var(--cyan);
+  --middle:var(--coral);
+  --base:var(--violet);
+
+  --font-display:"Oswald","Arial Narrow",Arial,sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+
+  --bar-h:34px;
+}
+
+*{box-sizing:border-box}
+
+html,body{
+  margin:0;
+  height:100%;
+  background:var(--black);
+  color:var(--white);
+  font-family:var(--font-mono);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+body{padding-top:var(--bar-h)}
+
+::selection{background:var(--white);color:var(--black)}
+
+/* ---------- texture: fine grain, near-invisible ---------- */
+.grain{
+  position:fixed;
+  inset:0;
+  z-index:1000;
+  pointer-events:none;
+  opacity:.05;
+  mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* ---------- custom cursor: inverting observation frame ---------- */
+.cursor{
+  position:fixed;
+  top:0;left:0;
+  width:44px;height:44px;
+  transform:translate(-50%,-50%);
+  pointer-events:none;
+  z-index:1001;
+  border:1px solid #fff;
+  background:#fff;
+  mix-blend-mode:difference;
+  display:none;
+}
+body.cursor-active{cursor:none}
+body.cursor-active .cursor{display:block}
+
+/* ---------- fixed frame bar ---------- */
+.frame-bar{
+  position:fixed;
+  top:0;left:0;right:0;
+  height:var(--bar-h);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 20px;
+  border-bottom:1px solid var(--line-soft);
+  background:var(--black);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--gray-1);
+  z-index:900;
+}
+
+#scene-root{
+  position:fixed;
+  inset:0;
+  z-index:0;
+}
+#scene-root canvas{
+  display:block;
+  width:100%;
+  height:100%;
+}
+
+/* ---------- loading ---------- */
+.loading{
+  position:fixed;
+  inset:0;
+  z-index:50;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  background:var(--black);
+  transition:opacity .5s ease;
+}
+.loading p{margin:0}
+.loading p:first-child{
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:20px;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+}
+.loading-sub{
+  font-size:11px;
+  color:var(--gray-2);
+  letter-spacing:.06em;
+}
+.loading.hidden{opacity:0;pointer-events:none}
+
+/* ---------- shared panel look ----------
+   Only the visual treatment lives here — each panel sets its own
+   position/z-index below, so their corners can be kept disjoint. */
+.panel{
+  background:var(--panel-bg);
+  border:1px solid var(--line-soft);
+  padding:16px 18px;
+}
+
+.info-label{
+  margin:0;
+  font-size:9px;
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+}
+.info-value{
+  margin:2px 0 0;
+  font-size:12px;
+  color:var(--gray-1);
+}
+
+/* ---------- masthead ---------- */
+.masthead{
+  position:fixed;
+  top:calc(var(--bar-h) + 26px);
+  left:24px;
+  z-index:10;
+  pointer-events:none;
+  max-width:min(420px, calc(100vw - 48px));
+}
+.eyebrow{
+  display:block;
+  margin:0 0 8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+}
+.wordmark{
+  margin:0;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:clamp(24px,3.4vw,38px);
+  letter-spacing:-.01em;
+  line-height:1;
+  text-transform:uppercase;
+}
+.tagline{
+  margin:8px 0 0;
+  font-size:11px;
+  letter-spacing:.04em;
+  color:var(--gray-2);
+}
+
+/* ---------- legend ---------- */
+.top-actions{
+  position:fixed;
+  top:calc(var(--bar-h) + 24px);
+  right:24px;
+  z-index:11;
+  display:flex;
+  flex-wrap:wrap;
+  justify-content:flex-end;
+  gap:8px;
+  max-width:calc(100vw - 48px);
+}
+.icon-btn{
+  background:transparent;
+  border:1px solid var(--line-soft);
+  color:var(--gray-1);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  padding:8px 14px;
+  cursor:pointer;
+  transition:background-color .15s linear,color .15s linear,border-color .15s linear;
+}
+.icon-btn:hover{background:var(--white);color:var(--black);border-color:var(--white)}
+
+.legend-panel{
+  position:fixed;
+  top:calc(var(--bar-h) + 64px);
+  right:24px;
+  z-index:11;
+  width:270px;
+  max-width:calc(100vw - 48px);
+}
+.legend-panel h2{
+  margin:0 0 12px;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:13px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--white);
+}
+.legend-panel dl{margin:0}
+.legend-panel dt{
+  font-size:9px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--gray-1);
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid var(--line-faint);
+}
+.legend-panel dt:first-child{margin-top:0;padding-top:0;border-top:none}
+.legend-panel dd{
+  margin:4px 0 0;
+  font-size:11px;
+  line-height:1.5;
+  color:var(--gray-2);
+}
+.legend-note{
+  margin:14px 0 0;
+  padding-top:12px;
+  border-top:1px solid var(--line-faint);
+  font-size:10.5px;
+  line-height:1.5;
+  color:var(--gray-2);
+}
+
+/* ---------- info panel ---------- */
+.info-panel{
+  position:fixed;
+  z-index:10;
+  left:24px;
+  bottom:24px;
+  width:280px;
+  max-width:calc(100vw - 48px);
+}
+#info-name{
+  margin:2px 0 12px;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:17px;
+  line-height:1.2;
+  letter-spacing:-.01em;
+  text-transform:uppercase;
+}
+.info-row{
+  display:flex;
+  gap:24px;
+  margin-top:12px;
+}
+.note-block{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line-faint);
+}
+.note-top{color:var(--top)}
+.note-middle{color:var(--middle)}
+.note-base{color:var(--base)}
+.note-list{
+  margin:4px 0 0;
+  font-size:11px;
+  line-height:1.55;
+  color:var(--gray-1);
+}
+.rating-row{
+  margin-top:14px;
+  padding-top:12px;
+  border-top:1px solid var(--line-faint);
+  font-size:10px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+}
+
+/* ---------- layer toggles ---------- */
+.layer-toggles{
+  position:fixed;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%);
+  z-index:10;
+  display:flex;
+  gap:1px;
+}
+.layer-btn{
+  font-family:var(--font-mono);
+  font-size:10px;
+  font-weight:500;
+  letter-spacing:.14em;
+  text-transform:uppercase;
+  padding:10px 18px;
+  background:var(--panel-bg);
+  border:1px solid var(--line-soft);
+  color:var(--gray-2);
+  cursor:pointer;
+  transition:color .15s linear,border-color .15s linear;
+}
+.layer-btn.active{color:var(--white);border-color:var(--line)}
+.layer-btn[data-layer="top"].active{color:var(--top);border-color:var(--top)}
+.layer-btn[data-layer="middle"].active{color:var(--middle);border-color:var(--middle)}
+.layer-btn[data-layer="base"].active{color:var(--base);border-color:var(--base)}
+
+/* ---------- explore / search ----------
+   Sits below the legend toggle, in the same top-right slot the legend
+   panel opens into — when the legend is toggled open it overlays this
+   (higher z-index) rather than the two competing for separate space.
+   `bottom` reserves the space related-panel needs below it (its own
+   24px offset + ~300px for a full 6-item list + a 24px gap), so the
+   two never overlap regardless of viewport height; the results list
+   scrolls internally instead of growing the panel further. */
+.explore-panel{
+  position:fixed;
+  top:calc(var(--bar-h) + 64px);
+  right:24px;
+  bottom:348px;
+  z-index:10;
+  width:270px;
+  max-width:calc(100vw - 48px);
+  max-height:420px;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+#search-input{
+  width:100%;
+  background:transparent;
+  border:none;
+  border-bottom:1px solid var(--line-soft);
+  color:var(--white);
+  font-family:var(--font-mono);
+  font-size:12px;
+  padding:0 0 8px;
+  outline:none;
+}
+#search-input::placeholder{color:var(--gray-2)}
+
+.explore-filters{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  margin-top:10px;
+  font-size:10px;
+}
+#family-filter{
+  flex:1;
+  min-width:0;
+  background:var(--black);
+  color:var(--gray-1);
+  border:1px solid var(--line-soft);
+  font-family:var(--font-mono);
+  font-size:10px;
+  padding:6px 4px;
+}
+.year-range{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  color:var(--gray-2);
+}
+.year-range input{
+  width:52px;
+  background:var(--black);
+  color:var(--gray-1);
+  border:1px solid var(--line-soft);
+  font-family:var(--font-mono);
+  font-size:10px;
+  padding:6px 4px;
+  -moz-appearance:textfield;
+}
+/* el spinner nativo de type="number" no cabe en los 52px y desborda la
+   caja; se oculta porque inputmode="numeric" ya cubre el teclado móvil */
+.year-range input::-webkit-outer-spin-button,
+.year-range input::-webkit-inner-spin-button{
+  -webkit-appearance:none;
+  margin:0;
+}
+
+.results-list{
+  list-style:none;
+  margin:12px 0 0;
+  padding:0;
+  flex:1 1 auto;
+  min-height:0;
+  overflow-y:auto;
+  border-top:1px solid var(--line-faint);
+}
+.results-list li{
+  padding:9px 2px;
+  border-bottom:1px solid var(--line-faint);
+  cursor:pointer;
+  font-size:11px;
+  transition:background-color .15s linear,color .15s linear;
+}
+.results-list li:hover,.results-list li.selected{background:var(--white);color:var(--black)}
+.result-name{display:block;color:inherit}
+.result-meta{
+  display:block;
+  font-size:9px;
+  color:inherit;
+  opacity:.65;
+  margin-top:2px;
+}
+
+/* ---------- related ---------- */
+.related-panel{
+  position:fixed;
+  z-index:10;
+  bottom:24px;
+  right:24px;
+  width:220px;
+  max-width:calc(100vw - 48px);
+}
+.related-list{
+  list-style:none;
+  margin:8px 0 0;
+  padding:0;
+}
+.related-list li{
+  padding:7px 2px;
+  font-size:11px;
+  cursor:pointer;
+  color:var(--gray-1);
+  border-bottom:1px solid var(--line-faint);
+  transition:background-color .15s linear,color .15s linear;
+}
+.related-list li:last-child{border-bottom:none}
+.related-list li:hover{background:var(--white);color:var(--black)}
+.related-list .rel-name{display:block}
+.related-list .rel-meta{font-size:9px;color:inherit;opacity:.65}
+
+/* ---------- tooltip ---------- */
+.tooltip{
+  position:fixed;
+  z-index:40;
+  pointer-events:none;
+  background:var(--black);
+  border:1px solid var(--line-soft);
+  padding:8px 10px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  line-height:1.5;
+  max-width:220px;
+  color:var(--gray-1);
+  transform:translate(14px, 14px);
+}
+.tooltip strong{
+  display:block;
+  color:var(--white);
+  font-size:10px;
+  letter-spacing:.04em;
+  margin-bottom:2px;
+}
+
+/* ---------- mapa de notas ---------- */
+.map-panel{
+  position:fixed;
+  top:var(--bar-h);
+  left:0;
+  right:0;
+  bottom:0;
+  z-index:200;
+  background:var(--black);
+  display:flex;
+  flex-direction:column;
+}
+.map-panel[hidden]{display:none}
+.map-header{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  gap:20px;
+  padding:14px 24px;
+  border-bottom:1px solid var(--line-soft);
+}
+.map-header-title{display:flex;flex-direction:column;gap:2px}
+.map-focus-name{
+  margin:0;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:15px;
+  letter-spacing:-.01em;
+  text-transform:uppercase;
+  color:var(--white);
+}
+.map-status{
+  margin-left:auto;
+  font-size:10px;
+  letter-spacing:.05em;
+  color:var(--gray-2);
+  white-space:nowrap;
+}
+.map-root{
+  position:relative;
+  flex:1 1 auto;
+  min-height:0;
+}
+.map-root canvas{display:block;width:100%;height:100%}
+
+.map-legend-panel{
+  position:fixed;
+  z-index:201;
+  top:calc(var(--bar-h) + 68px);
+  right:24px;
+  width:270px;
+  max-width:calc(100vw - 48px);
+}
+.map-legend-panel h2{
+  margin:0 0 12px;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:13px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+  color:var(--white);
+}
+.map-legend-panel dl{margin:0}
+.legend-row{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  margin-top:10px;
+  padding-top:10px;
+  border-top:1px solid var(--line-faint);
+}
+.legend-row:first-child{margin-top:0;padding-top:0;border-top:none}
+.legend-preview{
+  flex:0 0 auto;
+  width:44px;
+  height:44px;
+  background:#000;
+  border:1px solid var(--line-faint);
+}
+.map-legend-panel dt{
+  font-size:9px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  color:var(--gray-1);
+}
+.map-legend-panel dd{
+  margin:4px 0 0;
+  font-size:11px;
+  line-height:1.5;
+  color:var(--gray-2);
+}
+.map-legend-panel .legend-note{
+  margin:14px 0 0;
+  padding-top:12px;
+  border-top:1px solid var(--line-faint);
+  font-size:10.5px;
+  line-height:1.5;
+  color:var(--gray-2);
+}
+
+.map-label{
+  position:absolute;
+  z-index:5;
+  transform:translate(-50%,-160%);
+  pointer-events:none;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.04em;
+  text-transform:uppercase;
+  color:var(--white);
+  text-shadow:0 1px 3px rgba(0,0,0,.9),0 0 8px rgba(0,0,0,.75);
+  white-space:nowrap;
+  display:none;
+}
+.map-label-focus{color:var(--cyan)}
+
+.map-info-card{
+  position:fixed;
+  z-index:201;
+  left:24px;
+  bottom:24px;
+  width:280px;
+  max-width:calc(100vw - 48px);
+}
+.map-info-name{
+  margin:2px 0 8px;
+  font-family:var(--font-display);
+  font-weight:500;
+  font-size:15px;
+  line-height:1.25;
+  letter-spacing:-.01em;
+  text-transform:uppercase;
+  color:var(--white);
+}
+.map-view-btn{
+  display:block;
+  width:100%;
+  margin-top:14px;
+  text-align:center;
+}
+
+.map-hint{
+  position:fixed;
+  z-index:201;
+  bottom:24px;
+  left:50%;
+  transform:translateX(-50%);
+  margin:0;
+  font-size:10px;
+  letter-spacing:.04em;
+  color:var(--gray-2);
+  background:var(--panel-bg);
+  border:1px solid var(--line-soft);
+  padding:8px 14px;
+  white-space:nowrap;
+}
+
+/* ---------- scrollbars ---------- */
+.results-list::-webkit-scrollbar{width:4px}
+.results-list::-webkit-scrollbar-thumb{background:var(--line-soft)}
+
+/* ---------- responsive ---------- */
+@media (max-width: 900px){
+  .info-panel{width:calc(100vw - 48px)}
+  .explore-panel{width:calc(100vw - 48px);bottom:auto;max-height:min(42vh, 420px)}
+  .related-panel{display:none}
+}
+
+@media (max-width: 640px){
+  .frame-bar span:last-child{display:none}
+  .masthead{top:calc(var(--bar-h) + 14px);left:14px}
+  .top-actions{top:calc(var(--bar-h) + 14px);right:14px}
+  .icon-btn{font-size:9px;padding:7px 11px}
+  .legend-panel{top:calc(var(--bar-h) + 52px);right:14px;left:14px;width:auto}
+
+  /* not enough height to keep explore-panel below the masthead and
+     above info-panel, so it drops to the bottom like layer-toggles
+     did — and layer-toggles moves up top to stay clear of both */
+  .explore-panel{top:auto;bottom:120px;left:14px;right:14px;width:auto;max-height:34vh}
+  .info-panel{left:14px;right:14px;bottom:24px;width:auto}
+  .related-panel{display:none}
+  .layer-toggles{bottom:auto;top:calc(var(--bar-h) + 14px);left:50%}
+
+  .map-header{flex-wrap:wrap;gap:8px 20px;padding:12px 14px}
+  .map-status{margin-left:0}
+  .map-info-card{left:14px;right:14px;bottom:14px;width:auto}
+  .map-hint{display:none}
+}

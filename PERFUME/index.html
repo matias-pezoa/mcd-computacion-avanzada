@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VRTG SCENT — Atlas morfológico de perfumes</title>
+  <meta name="description" content="Cartografía 3D generativa de perfiles olfativos, construida a partir de datos reales de perfumes." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"></div>
+
+  <header class="frame-bar">
+    <span>MP — 2026</span>
+    <span>Ejercicio 02 — VRTG SCENT</span>
+  </header>
+
+  <div id="scene-root"></div>
+  <div id="tooltip" class="tooltip" hidden></div>
+
+  <div id="loading" class="loading">
+    <p>VRTG SCENT</p>
+    <p class="loading-sub">leyendo perfume_visualization.json…</p>
+  </div>
+
+  <header class="masthead">
+    <span class="eyebrow">Registro 001 — Computación Avanzada / MCD UAI</span>
+    <h1 class="wordmark">VRTG SCENT</h1>
+    <p class="tagline">atlas morfológico de perfiles olfativos</p>
+  </header>
+
+  <div class="top-actions">
+    <button id="map-toggle" class="icon-btn" type="button" aria-expanded="false" aria-controls="map-panel">
+      mapa de notas
+    </button>
+    <button id="legend-toggle" class="icon-btn" type="button" aria-expanded="false" aria-controls="legend-panel">
+      ¿cómo leer esto?
+    </button>
+  </div>
+
+  <section id="legend-panel" class="panel legend-panel" hidden>
+    <h2>dato → regla → forma</h2>
+    <dl>
+      <dt>nota olfativa individual</dt>
+      <dd>elemento propio en la composición: hash de su nombre → arquetipo (blob glossy, cromo, chenille, concreto o vidrio) y dirección fijos</dd>
+
+      <dt>top / middle / base notes</dt>
+      <dd>posición: periferia superior · anillo medio · núcleo inferior, ancladas a la columna central por un tendón</dd>
+
+      <dt>cantidad de notas por capa</dt>
+      <dd>densidad de la composición: más notas → elementos más pequeños para que quepan sin saturar</dd>
+
+      <dt>fragrance family</dt>
+      <dd>color de cada elemento y de la columna; material de la columna (metalness/roughness/clearcoat)</dd>
+
+      <dt>year</dt>
+      <dd>profundidad Z del conjunto + marcador en la línea temporal</dd>
+
+      <dt>rate / rating_count</dt>
+      <dd>escala global de los elementos (normalizadas, sin dominancia de outliers)</dd>
+    </dl>
+    <p class="legend-note">Cada nota tiene una forma y una dirección fijas (hash de su nombre): la misma nota siempre genera el mismo elemento en el mismo lugar relativo, en cualquier perfume — sólo su color y tamaño cambian. Cada perfume combina un conjunto distinto de notas, así que cada composición resulta única.</p>
+  </section>
+
+  <section class="panel explore-panel">
+    <div class="explore-header">
+      <input id="search-input" type="text" placeholder="buscar por nombre o marca…" autocomplete="off" />
+    </div>
+
+    <div class="explore-filters">
+      <select id="family-filter">
+        <option value="">todas las familias</option>
+      </select>
+      <div class="year-range">
+        <input id="year-min" type="number" inputmode="numeric" />
+        <span>—</span>
+        <input id="year-max" type="number" inputmode="numeric" />
+      </div>
+    </div>
+
+    <ul id="results-list" class="results-list"></ul>
+  </section>
+
+  <aside id="info-panel" class="panel info-panel">
+    <p class="info-label">perfume</p>
+    <h1 id="info-name">—</h1>
+    <p class="info-label">brand</p>
+    <p id="info-brand" class="info-value">—</p>
+    <div class="info-row">
+      <div>
+        <p class="info-label">year</p>
+        <p id="info-year" class="info-value">—</p>
+      </div>
+      <div>
+        <p class="info-label">family</p>
+        <p id="info-family" class="info-value">—</p>
+      </div>
+    </div>
+
+    <div class="note-block">
+      <p class="info-label note-top">top notes</p>
+      <p id="info-top" class="note-list">—</p>
+    </div>
+    <div class="note-block">
+      <p class="info-label note-middle">middle notes</p>
+      <p id="info-middle" class="note-list">—</p>
+    </div>
+    <div class="note-block">
+      <p class="info-label note-base">base notes</p>
+      <p id="info-base" class="note-list">—</p>
+    </div>
+
+    <div class="rating-row">
+      <span id="info-rate">sin calificación</span>
+    </div>
+  </aside>
+
+  <div id="layer-toggles" class="layer-toggles">
+    <button type="button" class="layer-btn note-top active" data-layer="top">TOP</button>
+    <button type="button" class="layer-btn note-middle active" data-layer="middle">HEART</button>
+    <button type="button" class="layer-btn note-base active" data-layer="base">BASE</button>
+  </div>
+
+  <section id="related-panel" class="panel related-panel">
+    <p class="info-label">perfumes relacionados</p>
+    <ul id="related-list" class="related-list"></ul>
+  </section>
+
+  <section id="map-panel" class="map-panel" hidden>
+    <header class="map-header">
+      <div class="map-header-title">
+        <span class="info-label">mapa de notas — expansión desde</span>
+        <p id="map-focus-name" class="map-focus-name">—</p>
+      </div>
+      <span id="map-status" class="map-status">0 perfumes · 0 vínculos</span>
+      <button id="map-legend-toggle" class="icon-btn" type="button" aria-expanded="false" aria-controls="map-legend-panel">leyenda</button>
+      <button id="map-close" class="icon-btn" type="button">cerrar ✕</button>
+    </header>
+
+    <div id="map-root" class="map-root"></div>
+
+    <section id="map-legend-panel" class="panel map-legend-panel" hidden>
+      <h2>forma / color → qué significa</h2>
+      <dl>
+        <div class="legend-row">
+          <canvas class="legend-preview" id="legend-preview-blob"></canvas>
+          <div><dt>blob glossy</dt><dd>floral o frutal</dd></div>
+        </div>
+
+        <div class="legend-row">
+          <canvas class="legend-preview" id="legend-preview-glass"></canvas>
+          <div><dt>vidrio translúcido</dt><dd>cítrico, ámbar o gourmand</dd></div>
+        </div>
+
+        <div class="legend-row">
+          <canvas class="legend-preview" id="legend-preview-concrete"></canvas>
+          <div><dt>bloque de concreto</dt><dd>madera, resina oscura, especia o ahumado</dd></div>
+        </div>
+
+        <div class="legend-row">
+          <canvas class="legend-preview" id="legend-preview-fuzz"></canvas>
+          <div><dt>pompón / fuzz</dt><dd>almizcle, verde o herbal</dd></div>
+        </div>
+
+        <div class="legend-row">
+          <canvas class="legend-preview" id="legend-preview-chrome"></canvas>
+          <div><dt>cromo</dt><dd>acuático, metálico u ozónico</dd></div>
+        </div>
+      </dl>
+      <p class="legend-note">color de cada forma = familia olfativa del perfume, con una leve variación propia de cada nota (igual que en la composición 3D individual) · aura = familia olfativa del perfume · tamaño del nodo = similitud con el foco · grosor/brillo del vínculo = fuerza de la composición compartida · dentro de cada nodo, las notas que no comparte con el foco se ven más chicas y apagadas</p>
+    </section>
+
+    <aside id="map-info-card" class="panel map-info-card" hidden>
+      <p class="info-label">perfume</p>
+      <p id="map-info-name" class="map-info-name">—</p>
+      <p id="map-info-meta" class="info-value">—</p>
+      <div class="note-block">
+        <p class="info-label">notas en común con el foco</p>
+        <p id="map-info-shared" class="note-list">—</p>
+      </div>
+      <button id="map-view-composition" class="icon-btn map-view-btn" type="button">ver composición 3D →</button>
+    </aside>
+
+    <p class="map-hint">click: info · doble click: enfocar y expandir · arrastrar: orbitar</p>
+  </section>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js",
+        "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.180.0/examples/jsm/",
+        "d3": "https://cdn.jsdelivr.net/npm/d3@7/+esm"
+      }
+    }
+  </script>
+
+  <script type="module" src="./script.js"></script>
+
+  <script>
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      var cur = document.querySelector('.cursor');
+      document.body.classList.add('cursor-active');
+      window.addEventListener('pointermove', function (e) {
+        cur.style.left = e.clientX + 'px';
+        cur.style.top = e.clientY + 'px';
+      });
+    }
+  </script>
+</body>
+</html>
