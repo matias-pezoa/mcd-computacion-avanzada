@@ -85,6 +85,16 @@ select:focus-visible,
 }
 
 /* ---------- fixed frame bar ---------- */
+.frame-bar-left{display:flex;align-items:center;gap:16px}
+.frame-nav{display:flex;align-items:center;gap:8px}
+.frame-nav-btn{
+  background:transparent;border:1px solid var(--line-soft);color:var(--gray-1);
+  font:inherit;font-family:var(--font-mono);font-size:10px;letter-spacing:.06em;text-transform:uppercase;
+  padding:4px 10px;line-height:1.4;cursor:pointer;text-decoration:none;
+  transition:background-color .16s var(--ease),color .16s var(--ease),border-color .16s var(--ease);
+}
+.frame-nav-btn:hover{background:var(--hover-fill);color:var(--white);border-color:var(--line)}
+
 .frame-bar{
   position:fixed;
   top:0;left:0;right:0;

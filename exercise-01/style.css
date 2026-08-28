@@ -39,6 +39,15 @@ body.cursor-active .cursor{display:block}
   font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
   color:var(--gray-1);z-index:900;
 }
+.frame-bar-left{display:flex;align-items:center;gap:16px}
+.frame-nav{display:flex;align-items:center;gap:8px}
+.frame-nav-btn{
+  background:transparent;border:1px solid var(--line-soft);color:var(--gray-1);
+  font:inherit;font-family:var(--font-mono);font-size:10px;letter-spacing:.09em;text-transform:uppercase;
+  padding:4px 10px;line-height:1.4;cursor:pointer;text-decoration:none;
+  transition:background-color .15s linear,color .15s linear,border-color .15s linear;
+}
+.frame-nav-btn:hover{background:var(--white);color:var(--black);border-color:var(--white)}
 
 .app-shell{display:grid;grid-template-columns:minmax(0,1fr) 340px;height:calc(100vh - var(--bar-h))}
 .viewport-shell{position:relative;min-width:0;background:var(--bg)}

@@ -2552,12 +2552,14 @@ function renderPoster(focusRecord) {
   pel("line", { x1: 60, y1: 44, x2: 880, y2: 44, stroke: "rgba(244,244,241,.26)" }, svg);
   ptext(svg, 60, 72, "REGISTRO 001 — COMPUTACIÓN AVANZADA / MCD · UAI", { "font-size": 10, "letter-spacing": 1.9, fill: P_DIM });
   ptext(svg, 880, 80, "L · 001", { "text-anchor": "end", "font-size": 11, "letter-spacing": 2, fill: P_CYAN });
-  ptext(svg, 880, 132, "Vecindario olfativo", { "text-anchor": "end", "font-family": "'Oswald', 'Arial Narrow', sans-serif", "font-weight": 500, "font-size": 44, "letter-spacing": -0.4, fill: P_INK });
 
   const nm = focusRecord.name.toUpperCase();
   const nmShort = nm.length > 30 ? nm.slice(0, 29).trimEnd() + "…" : nm;
+  const titleShort = nm.length > 24 ? nm.slice(0, 23).trimEnd() + "…" : nm;
+  ptext(svg, 880, 132, titleShort, { "text-anchor": "end", "font-family": "'Oswald', 'Arial Narrow', sans-serif", "font-weight": 500, "font-size": 44, "letter-spacing": -0.4, fill: P_INK });
+
   pTspans(svg, 880, 164, [
-    [`Los ${related.length || "—"} perfumes más afines a ${nmShort}`, 0],
+    [`Vecindario olfativo — los ${related.length || "—"} perfumes más afines`, 0],
     ["por afinidad de composición. Cada perfume es una nube de", 16],
     ["objetos —uno por nota, con la forma de su categoría—;", 16],
     ["se agrupan alrededor de su nota puente.", 16],
