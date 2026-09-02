@@ -392,6 +392,13 @@ canvas#canvas-out{
 a{color:inherit}
 a:focus-visible{outline:1px solid var(--white);outline-offset:3px}
 
+.archive-footer .home-link{
+  text-decoration:none;
+  color:var(--gray-2);
+  transition:color .15s linear;
+}
+.archive-footer .home-link:hover{color:var(--white)}
+
 /* ============================================================
    RESPONSIVE
    ============================================================ */
