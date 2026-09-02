@@ -4,79 +4,140 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Desnaturalización IA · Prototipo baja resolución</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="style.css" />
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
-  <header>
-    <h1>Desnaturalización IA — sistema de distorsión</h1>
-    <p class="subtitle">Prototipo de baja resolución · instrumento biométrico → MQTT → distorsión de imagen</p>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"></div>
+
+  <header class="frame-bar">
+    <span>MP — 2026</span>
+    <span>Desnaturalización IA</span>
   </header>
 
   <main>
-    <section class="panel" id="panel-conexion">
-      <h2>1 · Conexión al broker</h2>
-      <div class="grid">
-        <label>Host (sin protocolo)
-          <input id="in-host" type="text" placeholder="xxxxxxxx.emqxsl.com" autocomplete="off" />
-        </label>
-        <label>Puerto WSS
-          <input id="in-port" type="text" value="8084" autocomplete="off" />
-        </label>
-        <label>Usuario
-          <input id="in-user" type="text" placeholder="usuario-mqtt" autocomplete="off" />
-        </label>
-        <label>Contraseña
-          <input id="in-pass" type="password" placeholder="••••••••" autocomplete="off" />
-        </label>
-        <label class="wide">Topic a escuchar
-          <input id="in-topic" type="text" value="proyecto/2026/desnaturalizacion-ia/instrumento/+/estado" autocomplete="off" />
-        </label>
-      </div>
-      <div class="actions">
-        <button id="btn-connect">Conectar</button>
-        <span id="estado-conexion" class="badge badge-off">Desconectado</span>
-      </div>
-      <p class="hint">Las credenciales no se guardan ni se suben al repositorio: se piden en pantalla cada vez (ver Anexo MQTT del curso).</p>
+
+    <section class="specimen" aria-label="Presentación">
+      <span class="eyebrow">Registro 000 — Prototipo de baja resolución</span>
+      <h1>Sistema de distorsión</h1>
+      <p class="lead">Instrumento biométrico&nbsp;→ MQTT&nbsp;→ distorsión de imagen en tiempo real.</p>
     </section>
 
-    <section class="panel" id="panel-fuente">
-      <h2>2 · Fuente de video</h2>
-      <div class="actions">
-        <button id="btn-webcam">Usar cámara</button>
-        <label class="file-label">o cargar un video
-          <input id="in-file" type="file" accept="video/*" />
-        </label>
-        <button id="btn-demo">Modo demostración (sin broker)</button>
-      </div>
-      <p class="hint">El modo demostración simula la señal biométrica localmente, sin depender del instrumento ni del broker: sirve para probar las reglas de distorsión de forma aislada.</p>
-    </section>
+    <div class="page">
 
-    <section class="panel canvas-panel">
-      <h2>3 · Video distorsionado</h2>
-      <div class="stage">
-        <video id="video-src" autoplay muted playsinline></video>
-        <canvas id="canvas-out" width="960" height="540"></canvas>
-      </div>
-    </section>
+      <section class="record" id="panel-conexion">
+        <div class="record-head">
+          <span class="record-index">Registro 001</span>
+          <span class="record-title">Conexión al broker</span>
+        </div>
+        <div class="record-body">
+          <div class="grid">
+            <label>Host (sin protocolo)
+              <input id="in-host" type="text" placeholder="xxxxxxxx.emqxsl.com" autocomplete="off" />
+            </label>
+            <label>Puerto WSS
+              <input id="in-port" type="text" value="8084" autocomplete="off" />
+            </label>
+            <label>Usuario
+              <input id="in-user" type="text" placeholder="usuario-mqtt" autocomplete="off" />
+            </label>
+            <label>Contraseña
+              <input id="in-pass" type="password" placeholder="••••••••" autocomplete="off" />
+            </label>
+            <label class="wide">Topic a escuchar
+              <input id="in-topic" type="text" value="proyecto/2026/desnaturalizacion-ia/instrumento/+/estado" autocomplete="off" />
+            </label>
+          </div>
+          <div class="actions">
+            <button id="btn-connect">Conectar</button>
+            <span id="estado-conexion" class="badge badge-off">Desconectado</span>
+          </div>
+          <p class="hint">Las credenciales no se guardan ni se suben al repositorio: se piden en pantalla cada vez (ver Anexo MQTT del curso).</p>
+        </div>
+      </section>
 
-    <section class="panel" id="panel-estado">
-      <h2>4 · Estado de la señal</h2>
-      <div class="grid stats">
-        <div class="stat"><span class="stat-label">Último mensaje</span><span id="stat-raw" class="stat-value">—</span></div>
-        <div class="stat"><span class="stat-label">Intensidad (0–100)</span><span id="stat-intensidad" class="stat-value">0</span></div>
-        <div class="stat"><span class="stat-label">Pico detectado</span><span id="stat-pico" class="stat-value">no</span></div>
-        <div class="stat"><span class="stat-label">Regla aplicada</span><span id="stat-regla" class="stat-value">sin alteración</span></div>
-      </div>
-      <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
-    </section>
+      <section class="record" id="panel-fuente">
+        <div class="record-head">
+          <span class="record-index">Registro 002</span>
+          <span class="record-title">Fuente de video</span>
+        </div>
+        <div class="record-body">
+          <div class="actions">
+            <button id="btn-webcam">Usar cámara</button>
+            <label class="file-label">o cargar un video
+              <input id="in-file" type="file" accept="video/*" />
+            </label>
+            <button id="btn-demo">Modo demostración (sin broker)</button>
+          </div>
+          <p class="hint">El modo demostración simula la señal biométrica localmente, sin depender del instrumento ni del broker: sirve para probar las reglas de distorsión de forma aislada.</p>
+        </div>
+      </section>
 
-    <section class="panel" id="panel-log">
-      <h2>5 · Registro de sesión</h2>
-      <div id="log"></div>
-    </section>
+      <section class="record record-canvas">
+        <div class="record-head">
+          <span class="record-index">Registro 003</span>
+          <span class="record-title">Video distorsionado</span>
+        </div>
+        <div class="record-body">
+          <div class="obs-frame stage">
+            <video id="video-src" autoplay muted playsinline></video>
+            <canvas id="canvas-out" width="960" height="540"></canvas>
+            <div class="obs-meta">
+              <span class="dim">CANVAS — 960 × 540</span>
+              <span class="ref">SALIDA — SEÑAL DEGRADADA</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="record" id="panel-estado">
+        <div class="record-head">
+          <span class="record-index">Registro 004</span>
+          <span class="record-title">Estado de la señal</span>
+        </div>
+        <div class="record-body">
+          <div class="grid stats">
+            <div class="stat"><span class="stat-label">Último mensaje</span><span id="stat-raw" class="stat-value">—</span></div>
+            <div class="stat"><span class="stat-label">Intensidad (0–100)</span><span id="stat-intensidad" class="stat-value">0</span></div>
+            <div class="stat"><span class="stat-label">Pico detectado</span><span id="stat-pico" class="stat-value">no</span></div>
+            <div class="stat"><span class="stat-label">Regla aplicada</span><span id="stat-regla" class="stat-value">sin alteración</span></div>
+          </div>
+          <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
+        </div>
+      </section>
+
+      <section class="record" id="panel-log">
+        <div class="record-head">
+          <span class="record-index">Registro 005</span>
+          <span class="record-title">Registro de sesión</span>
+        </div>
+        <div class="record-body">
+          <div id="log"></div>
+        </div>
+      </section>
+
+    </div>
   </main>
 
+  <footer class="archive-footer">
+    <span>Matías Pezoa — Computación Avanzada 2026</span>
+    <span>Prototipo — Desnaturalización IA</span>
+  </footer>
+
+  <script>
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      var cur = document.querySelector('.cursor');
+      document.body.classList.add('cursor-active');
+      window.addEventListener('pointermove', function (e) {
+        cur.style.left = e.clientX + 'px';
+        cur.style.top = e.clientY + 'px';
+      });
+    }
+  </script>
   <script src="main.js"></script>
 </body>
 </html>
