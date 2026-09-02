@@ -85,6 +85,17 @@ body.cursor-active .cursor{display:block}
   z-index:900;
 }
 
+.frame-bar .home-link{
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.09em;
+  text-transform:uppercase;
+  color:var(--gray-1);
+  text-decoration:none;
+  transition:color .15s linear;
+}
+.frame-bar .home-link:hover{color:var(--white)}
+
 main{display:block}
 
 /* ============================================================
