@@ -247,7 +247,7 @@ function log(texto, esError = false, esPico = false) {
   const linea = document.createElement("div");
   const hora = new Date().toLocaleTimeString();
   linea.textContent = `[${hora}] ${texto}`;
-  if (esError) linea.style.color = "#e05a5a";
+  if (esError) linea.classList.add("error");
   if (esPico) linea.classList.add("pico");
   const contenedor = document.getElementById("log");
   contenedor.appendChild(linea);

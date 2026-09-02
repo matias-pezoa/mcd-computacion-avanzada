@@ -360,6 +360,8 @@ canvas#canvas-out{
   padding-left:16px;
 }
 #log div.pico{color:var(--white)}
+#log div.error{color:var(--white)}
+#log div.error::before{content:"! ";color:var(--gray-1)}
 
 /* ============================================================
    FOOTER
