@@ -1,0 +1,15 @@
+{
+  "name": "desnaturalizacion-ia-bridge",
+  "version": "1.0.0",
+  "description": "Puente serie (Arduino) -> MQTT para el prototipo de baja resolución de Desnaturalización IA",
+  "main": "bridge.js",
+  "scripts": {
+    "simulate": "node simulate.js",
+    "bridge": "node bridge.js"
+  },
+  "dependencies": {
+    "mqtt": "^5.0.0",
+    "serialport": "^12.0.0",
+    "@serialport/parser-readline": "^12.0.0"
+  }
+}
