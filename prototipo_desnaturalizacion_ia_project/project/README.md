@@ -16,7 +16,7 @@ El ESP32 se conecta **directamente al broker por WiFi**: no hace falta puente No
 - **arduino/instrumento_esp32/** — versión anterior de un solo sensor (`intensidad`/`pico` fusionados). Se mantiene como referencia; `web/main.js` ya no lee ese esquema.
 - **arduino/pulso_sensor.ino** — versión antigua para Arduino Uno: solo imprime `{"valor":N}` por Serial a ~10 Hz y depende de `bridge/`.
 - **bridge/** — puente Node.js opcional para el Arduino Uno (esquema `intensidad`/`pico`): lee el puerto serie y publica por MQTT, o genera una señal sintética con `simulate.js`. No aplica al sketch multisensor, que publica directo.
-- **web/** — página que se suscribe al topic MQTT y aplica la distorsión sobre un video (cámara o archivo): ruido proporcional a la inclinación, fragmentación en el instante de un cambio brusco, filtro de color superpuesto según el sensor de color, y un dial (potenciómetro) que escala la amplitud de todo lo anterior. El botón "Modo demostración" simula los 3 sensores en el navegador, sin broker.
+- **web/** — página de pantalla única que se suscribe al topic MQTT y aplica la distorsión sobre un video (cámara o archivo) a pantalla completa: ruido proporcional a la inclinación, fragmentación en el instante de un cambio brusco, filtro de color superpuesto según el sensor de color, y un dial (potenciómetro) que escala la amplitud de todo lo anterior. El botón "Modo demostración" simula los 3 sensores en el navegador, sin broker. Incluye además una herramienta de captura: graba 30 s de video (con los datos horneados en el frame) y arma al terminar una línea de tiempo de cómo evolucionó cada sensor, todo descargable.
 
 ## Esquema del mensaje MQTT
 
@@ -81,9 +81,13 @@ No se escriben credenciales en el código: se pasan como variables de entorno en
 
 ### 3 · Página web (web/)
 
-Abre `web/index.html` con Live Server (o publícala en GitHub Pages). En el panel "1 · Conexión al broker" ingresa host, puerto WSS (8084), usuario y contraseña, y presiona Conectar. Elige cámara o un video de prueba en el panel "2 · Fuente de video".
+Abre `web/index.html` con Live Server (o publícala en GitHub Pages). Es una pantalla única: el video ocupa toda la ventana y los controles viven en menús desplegables (esquina superior derecha) más dos ventanas flotantes (arrastrables y redimensionables, como ventanas de escritorio):
 
-Si aún no tienes broker/hardware configurado, el botón **"Modo demostración (sin broker)"** simula la señal directamente en el navegador — sirve para calibrar y mostrar las reglas de distorsión de forma aislada.
+- **01 · Conexión** (menú) — host, puerto WSS (8084), usuario y contraseña del broker.
+- **02 · Fuente** (menú) — cámara, archivo de video, o **"Modo demostración"** (simula los 3 sensores en el navegador, sin broker ni hardware).
+- **03 · Señal** (ventana, arriba-izq.) — la forma abstracta (metaballs) y los datos crudos de cada sensor.
+- **04 · Registro** (menú) — log de la sesión.
+- **05 · Captura** (ventana, abajo-der.) — graba 30 s del video ya distorsionado (con un HUD de datos horneado en el frame) y, al terminar, dibuja una línea de tiempo (ruido / inclinación / control / color) de cómo evolucionó la señal. Descarga el `.webm` y/o las muestras en `.json`. Requiere un navegador con `canvas.captureStream` + `MediaRecorder` (Chrome/Edge/Firefox recientes).
 
 ## Estado de verificación
 

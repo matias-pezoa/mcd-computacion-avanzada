@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=5" />
+  <link rel="stylesheet" href="style.css?v=12" />
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
@@ -16,117 +16,162 @@
 
   <header class="frame-bar">
     <a class="home-link" href="../../../index.html">← Índice</a>
-    <span>Desnaturalización IA</span>
+    <span>Desnaturalización IA — sistema de distorsión</span>
   </header>
 
-  <main>
+  <!-- Escenario: el video/canvas ocupa toda la pantalla disponible entre las dos barras -->
+  <div class="stage-full">
+    <video id="video-src" autoplay muted playsinline></video>
+    <canvas id="canvas-out"></canvas>
+    <div class="stage-caption" aria-hidden="true">
+      <span>DESNATURALIZACIÓN IA</span>
+      <span>INSTRUMENTO → MQTT → DISTORSIÓN EN VIVO</span>
+    </div>
+  </div>
 
-    <section class="specimen" aria-label="Presentación">
-      <span class="eyebrow">Registro 000 — Prototipo de baja resolución</span>
-      <h1>Sistema de distorsión</h1>
-      <p class="lead">Instrumento biométrico&nbsp;→ MQTT&nbsp;→ distorsión de imagen en tiempo real.</p>
-    </section>
+  <!-- Menús desplegables: controlan el sistema sin ocupar espacio fijo sobre el video -->
+  <nav class="menu-dock" aria-label="Controles del sistema">
 
-    <div class="page">
-
-      <section class="record" id="panel-conexion">
-        <div class="record-head">
-          <span class="record-index">Registro 001</span>
-          <span class="record-title">Conexión al broker</span>
+    <div class="menu-item">
+      <button class="menu-trigger" type="button" data-target="panel-conexion" aria-expanded="false" aria-controls="panel-conexion">
+        <span><span class="num">01</span>Conexión</span>
+        <span id="trigger-estado-conexion" class="menu-trigger-estado">Desconectado</span>
+      </button>
+      <div class="menu-panel" id="panel-conexion" hidden>
+        <div class="grid">
+          <label>Host (sin protocolo)
+            <input id="in-host" type="text" placeholder="xxxxxxxx.emqxsl.com" autocomplete="off" />
+          </label>
+          <label>Puerto WSS
+            <input id="in-port" type="text" value="8084" autocomplete="off" />
+          </label>
+          <label>Usuario
+            <input id="in-user" type="text" placeholder="usuario-mqtt" autocomplete="off" />
+          </label>
+          <label>Contraseña
+            <input id="in-pass" type="password" placeholder="••••••••" autocomplete="off" />
+          </label>
+          <label class="wide">Topic a escuchar
+            <input id="in-topic" type="text" value="proyecto/2026/desnaturalizacion-ia/instrumento/+/estado" autocomplete="off" />
+          </label>
         </div>
-        <div class="record-body">
-          <div class="grid">
-            <label>Host (sin protocolo)
-              <input id="in-host" type="text" placeholder="xxxxxxxx.emqxsl.com" autocomplete="off" />
-            </label>
-            <label>Puerto WSS
-              <input id="in-port" type="text" value="8084" autocomplete="off" />
-            </label>
-            <label>Usuario
-              <input id="in-user" type="text" placeholder="usuario-mqtt" autocomplete="off" />
-            </label>
-            <label>Contraseña
-              <input id="in-pass" type="password" placeholder="••••••••" autocomplete="off" />
-            </label>
-            <label class="wide">Topic a escuchar
-              <input id="in-topic" type="text" value="proyecto/2026/desnaturalizacion-ia/instrumento/+/estado" autocomplete="off" />
-            </label>
+        <div class="actions">
+          <button id="btn-connect">Conectar</button>
+          <span id="estado-conexion" class="badge badge-off">Desconectado</span>
+        </div>
+        <p class="hint">Las credenciales no se guardan ni se suben al repositorio: se piden en pantalla cada vez (ver Anexo MQTT del curso).</p>
+      </div>
+    </div>
+
+    <!-- Fuente: un solo botón que activa la cámara directamente, sin menú
+         desplegable. Archivo/demo quedan como acciones mínimas secundarias
+         (texto subrayado, sin caja) para no perder esas rutas de prueba. -->
+    <div class="dock-block">
+      <button class="menu-trigger" id="btn-webcam" type="button">
+        <span><span class="num">02</span>Cámara</span>
+      </button>
+      <div class="fuente-extra">
+        <label class="file-label-mini">Archivo<input id="in-file" type="file" accept="video/*" /></label>
+        <button type="button" id="btn-demo" class="btn-mini">Demo</button>
+      </div>
+    </div>
+
+    <div class="menu-item">
+      <button class="menu-trigger" type="button" data-target="panel-log" aria-expanded="false" aria-controls="panel-log">
+        <span><span class="num">04</span>Registro</span>
+      </button>
+      <div class="menu-panel" id="panel-log" hidden>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <!-- Captura: un botón que arma/dispara la grabación de 30s, con una
+         línea de tiempo discreta (sin ventana, sin chrome) que aparece
+         debajo mientras graba y al terminar. -->
+    <div class="dock-block">
+      <button class="menu-trigger" id="btn-capturar" type="button">
+        <span><span class="num">05</span>Captura</span>
+        <span id="capture-estado" class="menu-trigger-estado">Inactivo</span>
+      </button>
+
+      <div class="capture-progreso-mini" id="capture-progreso-mini" hidden>
+        <div id="captura-progreso-track"><div id="captura-progreso-fill"></div></div>
+        <span id="captura-tiempo" class="captura-tiempo">00:00 / 00:30</span>
+      </div>
+
+      <div class="captura-resultado" id="captura-resultado" hidden>
+        <svg id="captura-chart" viewBox="0 0 220 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="captura-descargas">
+          <button type="button" id="btn-descargar-video" class="btn-mini">Video</button>
+          <button type="button" id="btn-descargar-datos" class="btn-mini">Datos</button>
+        </div>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- Visualización de la señal: ventana independiente, no depende de un menú.
+       Se arrastra desde la barra de título y se redimensiona desde la esquina
+       inferior derecha, como una ventana de escritorio. -->
+  <section class="data-window" id="data-window" aria-label="Visualización de la señal">
+    <div class="data-window-bar" id="data-window-bar">
+      <span class="data-window-title">
+        <span class="num">03</span>Señal
+        <span id="trigger-estado-senal" class="menu-trigger-estado">—</span>
+      </span>
+      <button type="button" class="data-window-toggle" id="data-window-toggle" aria-label="Minimizar panel de señal">–</button>
+    </div>
+    <div class="data-window-body">
+      <div class="estado-layout">
+
+        <div class="obs-frame blob-frame">
+          <svg id="blob-viz" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+          <div class="obs-meta">
+            <span class="dim" id="blob-estado-label">FORMA — ESTADO 01</span>
+            <span class="ref">MORFOLOGÍA SEGÚN SEÑAL</span>
           </div>
-          <div class="actions">
-            <button id="btn-connect">Conectar</button>
-            <span id="estado-conexion" class="badge badge-off">Desconectado</span>
-          </div>
-          <p class="hint">Las credenciales no se guardan ni se suben al repositorio: se piden en pantalla cada vez (ver Anexo MQTT del curso).</p>
         </div>
-      </section>
 
-      <section class="record" id="panel-fuente">
-        <div class="record-head">
-          <span class="record-index">Registro 002</span>
-          <span class="record-title">Fuente de video</span>
-        </div>
-        <div class="record-body">
-          <div class="actions">
-            <button id="btn-webcam">Usar cámara</button>
-            <label class="file-label">o cargar un video
-              <input id="in-file" type="file" accept="video/*" />
-            </label>
-            <button id="btn-demo">Modo demostración (sin broker)</button>
-          </div>
-          <p class="hint">El modo demostración simula la señal biométrica localmente, sin depender del instrumento ni del broker: sirve para probar las reglas de distorsión de forma aislada.</p>
-        </div>
-      </section>
-
-      <section class="record record-canvas">
-        <div class="record-head">
-          <span class="record-index">Registro 003</span>
-          <span class="record-title">Video distorsionado</span>
-        </div>
-        <div class="record-body">
-          <div class="obs-frame stage">
-            <video id="video-src" autoplay muted playsinline></video>
-            <canvas id="canvas-out" width="960" height="540"></canvas>
-            <div class="obs-meta">
-              <span class="dim">CANVAS — 960 × 540</span>
-              <span class="ref">SALIDA — SEÑAL DEGRADADA</span>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="record" id="panel-estado">
-        <div class="record-head">
-          <span class="record-index">Registro 004</span>
-          <span class="record-title">Estado de la señal</span>
-        </div>
-        <div class="record-body">
+        <div class="estado-datos">
           <div class="grid stats">
-            <div class="stat"><span class="stat-label">Último mensaje</span><span id="stat-raw" class="stat-value mono-value">—</span></div>
-            <div class="stat"><span class="stat-label">Inclinación (ADXL345)</span><span id="stat-inclinacion" class="stat-value">0°</span></div>
-            <div class="stat"><span class="stat-label">Cambio brusco</span><span id="stat-brusco" class="stat-value">no</span></div>
-            <div class="stat"><span class="stat-label">Control (potenciómetro)</span><span id="stat-control" class="stat-value">0</span></div>
-            <div class="stat"><span class="stat-label">Color dominante (TCS34725)</span><span class="stat-value stat-color-value"><span id="swatch-color" class="swatch"></span><span id="stat-color">—</span></span></div>
-            <div class="stat"><span class="stat-label">Regla aplicada</span><span id="stat-regla" class="stat-value mono-value">sin alteración</span></div>
+            <div class="stat">
+              <span class="stat-label">Inclinación (ADXL345)</span>
+              <span id="stat-inclinacion" class="stat-value">0°</span>
+              <span class="stat-map">→ rota la forma</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Cambio brusco</span>
+              <span id="stat-brusco" class="stat-value">no</span>
+              <span class="stat-map">→ salta de estado</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Control (potenciómetro)</span>
+              <span id="stat-control" class="stat-value">0</span>
+              <span class="stat-map">→ tamaño / dispersión</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Color dominante (TCS34725)</span>
+              <span class="stat-value stat-color-value"><span id="swatch-color" class="swatch"></span><span id="stat-color">—</span></span>
+              <span class="stat-map">→ degradé de color</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Último mensaje</span>
+              <span id="stat-raw" class="stat-value mono-value">—</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Regla aplicada</span>
+              <span id="stat-regla" class="stat-value mono-value">sin alteración</span>
+            </div>
           </div>
           <span class="bar-label">Ruido aplicado (inclinación × control)</span>
           <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
         </div>
-      </section>
 
-      <section class="record" id="panel-log">
-        <div class="record-head">
-          <span class="record-index">Registro 005</span>
-          <span class="record-title">Registro de sesión</span>
-        </div>
-        <div class="record-body">
-          <div id="log"></div>
-        </div>
-      </section>
-
+      </div>
     </div>
-  </main>
+  </section>
 
-  <footer class="archive-footer">
+  <footer class="frame-bar frame-bar-bottom">
     <span>Matías Pezoa — Computación Avanzada 2026</span>
     <a class="home-link" href="../../../index.html">← Volver al índice</a>
   </footer>

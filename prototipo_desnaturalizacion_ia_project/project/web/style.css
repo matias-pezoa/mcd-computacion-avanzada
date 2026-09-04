@@ -3,6 +3,16 @@
    Mismo lenguaje visual del sitio del curso: archivo científico /
    documentación técnica. Monocromo, líneas de 1px, sin esquinas
    redondeadas, Oswald + JetBrains Mono, grano fino.
+
+   Diagramación: pantalla única, sin scroll. El video ocupa todo el
+   espacio entre dos barras fijas. El dock (esquina superior derecha)
+   agrupa todos los controles: Conexión y Registro son desplegables
+   (tienen formularios/listas largas que conviene ocultar); Cámara y
+   Captura son botones directos con, a lo sumo, una línea de datos
+   discreta debajo — no ameritan un panel propio. "Señal" es la única
+   ventana aparte (arrastrable y redimensionable): a diferencia de los
+   demás, tiene sentido dejarla siempre visible mientras se opera el
+   sistema.
    ============================================================ */
 
 :root{
@@ -24,7 +34,8 @@
 
 *{box-sizing:border-box}
 
-html{background:var(--black);overflow-x:hidden}
+html,body{height:100%}
+html{background:var(--black);overflow:hidden}
 
 body{
   margin:0;
@@ -32,9 +43,8 @@ body{
   color:var(--white);
   font-family:var(--font-body);
   line-height:1.5;
-  padding-top:var(--bar-h);
+  overflow:hidden;
   -webkit-font-smoothing:antialiased;
-  overflow-x:hidden;
 }
 
 ::selection{background:var(--white);color:var(--black)}
@@ -66,16 +76,17 @@ body{
 body.cursor-active{cursor:none}
 body.cursor-active .cursor{display:block}
 
-/* ---------- fixed frame bar ---------- */
+/* ============================================================
+   BARRAS FIJAS (arriba / abajo) — enmarcan la pantalla única
+   ============================================================ */
 .frame-bar{
   position:fixed;
-  top:0;left:0;right:0;
+  left:0;right:0;
   height:var(--bar-h);
   display:flex;
   align-items:center;
   justify-content:space-between;
   padding:0 20px;
-  border-bottom:1px solid var(--line-soft);
   background:var(--black);
   font-family:var(--font-mono);
   font-size:10px;
@@ -84,6 +95,8 @@ body.cursor-active .cursor{display:block}
   color:var(--gray-1);
   z-index:900;
 }
+.frame-bar{top:0;border-bottom:1px solid var(--line-soft)}
+.frame-bar-bottom{top:auto;bottom:0;border-bottom:none;border-top:1px solid var(--line-soft)}
 
 .frame-bar .home-link{
   font-family:var(--font-mono);
@@ -96,87 +109,158 @@ body.cursor-active .cursor{display:block}
 }
 .frame-bar .home-link:hover{color:var(--white)}
 
-main{display:block}
+a{color:inherit}
+a:focus-visible{outline:1px solid var(--white);outline-offset:3px}
 
 /* ============================================================
-   HERO / SPECIMEN
+   ESCENARIO — video/canvas a pantalla completa entre las 2 barras
    ============================================================ */
-.specimen{
-  padding:104px 6vw 0;
+.stage-full{
+  position:fixed;
+  top:var(--bar-h);
+  bottom:var(--bar-h);
+  left:0;right:0;
+  background:var(--black);
+  overflow:hidden;
+  z-index:1;
 }
-.eyebrow{
+
+video#video-src{display:none}
+
+canvas#canvas-out{
+  width:100%;
+  height:100%;
   display:block;
+  /* Sin grayscale: el filtro de color del TCS34725 (colorHex) se dibuja a
+     color real dentro del canvas — es la señal, no un adorno de la UI. */
+  filter:contrast(1.08) brightness(.98);
+}
+
+/* Etiqueta discreta sobre el video: sin caja, solo sombra de texto, para
+   no restar legibilidad a la imagen que hay debajo. */
+.stage-caption{
+  position:absolute;
+  left:20px;
+  bottom:16px;
+  display:flex;
+  flex-direction:column;
+  gap:4px;
   font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.14em;
+  font-size:10px;
+  letter-spacing:.08em;
   text-transform:uppercase;
-  color:var(--gray-2);
-  margin:0 0 18px;
-}
-h1{
-  font-family:var(--font-display);
-  font-weight:500;
-  font-size:clamp(40px,6.2vw,84px);
-  letter-spacing:-.01em;
-  line-height:.98;
-  text-transform:uppercase;
-  margin:0 0 16px;
-}
-.lead{
-  font-size:15px;
-  line-height:1.5;
   color:var(--gray-1);
-  margin:0;
+  text-shadow:0 1px 4px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.7);
+  pointer-events:none;
+  z-index:2;
 }
+.stage-caption span:first-child{color:var(--white)}
 
 /* ============================================================
-   RECORD SECTIONS
+   MENÚS DESPLEGABLES — controles anclados, no bloquean el video
    ============================================================ */
-.page{
-  padding:56px 6vw 140px;
-}
-
-.record{
-  position:relative;
-  display:grid;
-  grid-template-columns:min(16vw,240px) 1fr;
-  column-gap:5vw;
-  padding-top:96px;
-  border-top:1px solid var(--line-faint);
-}
-.record:first-child{border-top:none;padding-top:64px}
-
-.record-head{
-  position:sticky;
-  top:calc(var(--bar-h) + 40px);
-  align-self:start;
+.menu-dock{
+  position:fixed;
+  top:calc(var(--bar-h) + 14px);
+  right:14px;
+  z-index:800;
   display:flex;
   flex-direction:column;
   gap:8px;
+  width:190px;
 }
-.record-index{
-  font-family:var(--font-mono);
-  font-size:11px;
-  letter-spacing:.1em;
-  color:var(--gray-2);
-}
-.record-title{
-  font-family:var(--font-display);
-  font-weight:500;
-  font-size:13px;
-  letter-spacing:.16em;
-  text-transform:uppercase;
-  color:var(--gray-1);
-}
-.record-title::before{content:"— "}
 
-.record-body{min-width:0}
+.menu-item{position:relative}
+
+.menu-trigger{
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  padding:9px 12px;
+  background:rgba(6,6,6,.7);
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  border:1px solid var(--line-soft);
+  color:var(--gray-1);
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  text-align:left;
+  cursor:pointer;
+  transition:background-color .15s linear,color .15s linear,border-color .15s linear;
+}
+.menu-trigger .num{color:var(--gray-2);margin-right:6px}
+.menu-trigger-estado{color:var(--gray-2);font-size:9px;white-space:nowrap}
+
+.menu-trigger:hover{border-color:var(--line);color:var(--white)}
+.menu-trigger[aria-expanded="true"]{background:var(--white);color:var(--black);border-color:var(--white)}
+.menu-trigger[aria-expanded="true"] .num,
+.menu-trigger[aria-expanded="true"] .menu-trigger-estado{color:var(--black)}
+.menu-trigger:focus-visible{outline:1px solid var(--white);outline-offset:2px}
+
+.menu-panel{
+  position:absolute;
+  top:calc(100% + 8px);
+  right:0;
+  width:380px;
+  max-width:calc(100vw - 28px);
+  max-height:calc(100vh - var(--bar-h) * 2 - 64px);
+  overflow-y:auto;
+  background:rgba(6,6,6,.94);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border:1px solid var(--line);
+  padding:20px;
+}
+.menu-panel[hidden]{display:none}
+
+/* A 380px de ancho, un formulario en 2 columnas deja los inputs demasiado
+   angostos: los paneles del dock apilan sus campos en una sola columna. */
+.menu-panel .grid{grid-template-columns:1fr}
+
+/* ---------- bloques del dock que NO son desplegables: un botón directo   */
+/* + contenido mínimo siempre en flujo (Cámara, Captura) ------------------ */
+.dock-block{width:100%}
+
+.fuente-extra{
+  display:flex;
+  align-items:center;
+  gap:14px;
+  margin-top:6px;
+  padding:0 2px;
+}
+.file-label-mini,
+.btn-mini{
+  background:none;
+  border:none;
+  padding:0;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+  cursor:pointer;
+  text-decoration:underline;
+  text-underline-offset:2px;
+  transition:color .15s linear;
+}
+.file-label-mini:hover,
+.btn-mini:hover{color:var(--white)}
+.file-label-mini input{
+  position:absolute;
+  width:1px;height:1px;
+  overflow:hidden;
+  clip:rect(0 0 0 0);
+}
 
 /* ---------- forms ---------- */
 .grid{
   display:grid;
   grid-template-columns:repeat(2, minmax(0, 1fr));
-  gap:18px 24px;
+  gap:16px 20px;
 }
 .grid.stats{grid-template-columns:repeat(3, minmax(0, 1fr))}
 
@@ -201,6 +285,7 @@ input[type="text"], input[type="password"]{
   font-family:var(--font-mono);
   font-size:14px;
   letter-spacing:0;
+  width:100%;
 }
 input[type="text"]:focus, input[type="password"]:focus{
   outline:none;
@@ -212,24 +297,26 @@ input[type="file"]{
   color:var(--gray-2);
   font-family:var(--font-mono);
   font-size:11px;
+  max-width:100%;
 }
 
 .actions{
   display:flex;
   align-items:center;
-  gap:16px;
-  margin-top:28px;
+  gap:14px;
+  margin-top:20px;
   flex-wrap:wrap;
 }
+.actions-col{flex-direction:column;align-items:stretch;margin-top:0}
 
 button{
   background:transparent;
   color:var(--white);
   border:1px solid var(--line);
-  padding:11px 20px;
+  padding:10px 16px;
   font-family:var(--font-display);
-  font-size:13px;
-  letter-spacing:.08em;
+  font-size:12px;
+  letter-spacing:.07em;
   text-transform:uppercase;
   cursor:pointer;
   transition:background-color .15s linear,color .15s linear;
@@ -264,17 +351,16 @@ button:focus-visible{outline:1px solid var(--white);outline-offset:3px}
 .badge-error{color:var(--white);border-style:dashed;border-color:var(--white)}
 
 .hint{
-  margin:24px 0 0;
+  margin:20px 0 0;
   font-family:var(--font-mono);
   font-size:10px;
   line-height:1.7;
   letter-spacing:.03em;
   color:var(--gray-2);
-  max-width:70ch;
 }
 
 /* ============================================================
-   CANVAS / OUTPUT
+   FORMA / OUTPUT frames genéricos (blob, etc.)
    ============================================================ */
 .obs-frame{
   position:relative;
@@ -295,33 +381,168 @@ button:focus-visible{outline:1px solid var(--white);outline-offset:3px}
 }
 .obs-meta .ref{color:var(--gray-1)}
 
-.record-canvas .record-body{padding-bottom:24px}
-
-.stage{
-  width:100%;
-  aspect-ratio:16 / 9;
-  overflow:hidden;
-}
-
-video#video-src{display:none}
-
-canvas#canvas-out{
-  width:100%;
-  height:100%;
-  display:block;
-  /* Sin grayscale: el filtro de color del TCS34725 (colorHex) se dibuja a
-     color real dentro del canvas — es la señal, no un adorno de la UI. */
-  filter:contrast(1.08) brightness(.98);
-}
-
 /* ============================================================
-   SIGNAL STATE
+   VENTANA "03 · SEÑAL" — forma (metaballs) + data
+   Independiente del dock de menús: se arrastra y se redimensiona como
+   una ventana de escritorio (ver .data-window más abajo).
    ============================================================ */
+.data-window{
+  position:fixed;
+  left:16px;
+  top:calc(var(--bar-h) + 16px);
+  z-index:750;
+  display:flex;
+  flex-direction:column;
+  width:400px;
+  min-width:280px;
+  min-height:160px;
+  max-width:calc(100vw - 32px);
+  max-height:calc(100vh - var(--bar-h) * 2 - 32px);
+  overflow:hidden;
+  resize:both;
+  background:rgba(6,6,6,.9);
+  backdrop-filter:blur(8px);
+  -webkit-backdrop-filter:blur(8px);
+  border:1px solid var(--line);
+}
+
+.data-window-bar{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:9px 10px 9px 12px;
+  border-bottom:1px solid var(--line-soft);
+  cursor:grab;
+  touch-action:none;
+  user-select:none;
+  -webkit-user-select:none;
+}
+.data-window-bar.arrastrando{cursor:grabbing}
+
+.data-window-title{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.07em;
+  text-transform:uppercase;
+  color:var(--gray-1);
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.data-window-title .num{color:var(--gray-2)}
+
+.data-window-toggle{
+  flex:0 0 auto;
+  width:22px;height:22px;
+  padding:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  background:transparent;
+  border:1px solid var(--line-soft);
+  color:var(--gray-1);
+  font-family:var(--font-mono);
+  font-size:13px;
+  line-height:1;
+  cursor:pointer;
+}
+.data-window-toggle:hover{border-color:var(--line);color:var(--white)}
+.data-window-toggle:focus-visible{outline:1px solid var(--white);outline-offset:2px}
+
+.data-window-body{
+  flex:1 1 auto;
+  overflow:auto;
+  padding:18px;
+  /* Contenedor de container queries: el contenido se reacomoda según el
+     ancho REAL de la ventana (no el del viewport) — así la información
+     es dinámica según la escala a la que el usuario la deje, en vez de
+     depender del tamaño de pantalla. */
+  container-type:inline-size;
+  container-name:data-window;
+}
+
+.data-window.minimizado{resize:none;min-height:0}
+.data-window.minimizado .data-window-body{display:none}
+
+/* Marca visual de la manija de resize nativa (esquina inferior derecha):
+   sin esto, el grip del navegador es casi invisible sobre el fondo con
+   blur, y la interacción de "ajustar escala" no se lee como posible. */
+.data-window::after{
+  content:"";
+  position:absolute;
+  right:3px;
+  bottom:3px;
+  width:10px;
+  height:10px;
+  pointer-events:none;
+  background:
+    linear-gradient(135deg,
+      transparent 0 38%, var(--line-soft) 38% 46%,
+      transparent 46% 60%, var(--line-soft) 60% 68%,
+      transparent 68% 100%);
+}
+.data-window.minimizado::after{display:none}
+
+/* El blob manda: ocupa todo el ancho, arriba y grande. La data queda
+   debajo, separada por una línea, en un segundo plano de lectura. */
+.estado-layout{
+  display:flex;
+  flex-direction:column;
+}
+
+.blob-frame{
+  width:100%;
+  aspect-ratio:2 / 1; /* igual que el viewBox del SVG (640×320): sin letterboxing */
+  overflow:hidden;
+  margin-bottom:28px;
+}
+#blob-viz{width:100%;height:100%;display:block}
+
+.estado-datos{
+  padding-top:20px;
+  border-top:1px solid var(--line-faint);
+}
+
+.blob-circulo-contorno{fill:var(--black)}
+
+.blob-circulo-relleno,
+.blob-circulo-contorno{
+  transition:cx 320ms ease-out, cy 320ms ease-out, r 320ms ease-out;
+}
+.blob-group.blob-salto .blob-circulo-relleno,
+.blob-group.blob-salto .blob-circulo-contorno{
+  transition:cx 220ms cubic-bezier(.34,1.56,.64,1),
+             cy 220ms cubic-bezier(.34,1.56,.64,1),
+             r 220ms cubic-bezier(.34,1.56,.64,1);
+}
+
+#blob-grad-principal stop,
+#blob-grad-acento stop{transition:stop-color 320ms linear}
+
+.estado-datos .grid.stats{grid-template-columns:repeat(2, minmax(0, 1fr))}
+
+/* La data es información dinámica: se reacomoda según el ancho REAL de
+   la ventana (container query sobre .data-window-body), no según el
+   viewport — achicar o agrandar la ventana con la manija cambia cuántas
+   columnas entran, para que nada quede apretado ni se recorte. */
+@container data-window (max-width: 360px){
+  .estado-datos .grid.stats{grid-template-columns:1fr}
+  .stat-map{display:none}
+}
+@container data-window (min-width: 620px){
+  .estado-datos .grid.stats{grid-template-columns:repeat(3, minmax(0, 1fr))}
+}
+
 .stat{
   display:flex;
   flex-direction:column;
-  gap:8px;
-  padding:14px 0 0;
+  gap:6px;
+  padding:12px 0 0;
   border-top:1px solid var(--line-faint);
 }
 .stat-label{
@@ -334,7 +555,7 @@ canvas#canvas-out{
 .stat-value{
   font-family:var(--font-display);
   font-weight:400;
-  font-size:22px;
+  font-size:17px;
   letter-spacing:.01em;
   font-variant-numeric:tabular-nums;
   color:var(--white);
@@ -344,17 +565,26 @@ canvas#canvas-out{
 /* JSON crudo / nombre de la regla: texto largo, más legible en mono */
 .stat-value.mono-value{
   font-family:var(--font-mono);
-  font-size:11px;
+  font-size:10px;
   font-weight:400;
   line-height:1.6;
   letter-spacing:0;
   color:var(--gray-1);
 }
 
+/* Etiqueta que señala qué modifica este dato en la forma */
+.stat-map{
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.03em;
+  color:var(--gray-2);
+  font-style:italic;
+}
+
 .stat-color-value{display:flex;align-items:center;gap:10px}
 .swatch{
   display:inline-block;
-  width:14px;height:14px;
+  width:13px;height:13px;
   border:1px solid var(--line-soft);
   background:transparent;
   flex-shrink:0;
@@ -362,7 +592,7 @@ canvas#canvas-out{
 
 .bar-label{
   display:block;
-  margin-top:32px;
+  margin-top:24px;
   font-family:var(--font-mono);
   font-size:10px;
   letter-spacing:.08em;
@@ -385,7 +615,66 @@ canvas#canvas-out{
 }
 
 /* ============================================================
-   SESSION LOG
+   "05 · CAPTURA" — un botón + una línea de tiempo discreta
+   Sin ventana: vive directo en el dock, igual que el resto de los
+   controles. El botón dispara los 30 s de grabación; debajo aparece,
+   en flujo (sin caja ni blur), primero el progreso y después el
+   resultado compacto — nunca los dos a la vez.
+   ============================================================ */
+#btn-capturar.grabando{
+  background:var(--white);
+  color:var(--black);
+  animation:captura-pulso 1.1s ease-in-out infinite;
+}
+@keyframes captura-pulso{
+  0%,100%{opacity:1}
+  50%{opacity:.55}
+}
+
+.capture-progreso-mini{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+#captura-progreso-track{
+  height:4px;
+  border:1px solid var(--line-soft);
+  overflow:hidden;
+}
+#captura-progreso-fill{
+  height:100%;
+  width:0%;
+  background:var(--white);
+  transition:width 120ms linear;
+}
+.captura-tiempo{
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.03em;
+  color:var(--gray-2);
+  font-variant-numeric:tabular-nums;
+}
+
+.captura-resultado{
+  margin-top:8px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+#captura-chart{
+  width:100%;
+  height:36px;
+  display:block;
+  border:1px solid var(--line-soft);
+}
+.captura-descargas{display:flex;gap:14px}
+
+.chart-line{fill:none;stroke:var(--white);stroke-width:1.2;vector-effect:non-scaling-stroke}
+.chart-tick{stroke:var(--white);stroke-width:1;opacity:.8;vector-effect:non-scaling-stroke}
+
+/* ============================================================
+   REGISTRO DE SESIÓN (log), dentro del panel "04 · Registro"
    ============================================================ */
 #log{
   font-family:var(--font-mono);
@@ -393,7 +682,7 @@ canvas#canvas-out{
   line-height:1.7;
   letter-spacing:.02em;
   color:var(--gray-2);
-  max-height:200px;
+  max-height:280px;
   overflow-y:auto;
   display:flex;
   flex-direction:column-reverse;
@@ -406,57 +695,37 @@ canvas#canvas-out{
 #log div.error::before{content:"! ";color:var(--gray-1)}
 
 /* ============================================================
-   FOOTER
-   ============================================================ */
-.archive-footer{
-  border-top:1px solid var(--line-soft);
-  padding:20px 6vw 40px;
-  display:flex;
-  justify-content:space-between;
-  font-family:var(--font-mono);
-  font-size:10px;
-  letter-spacing:.06em;
-  text-transform:uppercase;
-  color:var(--gray-2);
-}
-
-a{color:inherit}
-a:focus-visible{outline:1px solid var(--white);outline-offset:3px}
-
-.archive-footer .home-link{
-  text-decoration:none;
-  color:var(--gray-2);
-  transition:color .15s linear;
-}
-.archive-footer .home-link:hover{color:var(--white)}
-
-/* ============================================================
    RESPONSIVE
    ============================================================ */
-@media (max-width:900px){
-  .record{display:block;padding-top:64px}
-  .record:first-child{padding-top:48px}
-  .record-head{
-    position:static;
-    top:auto;
-    flex-direction:row;
-    align-items:baseline;
-    gap:18px;
-    margin-bottom:32px;
+@media (max-width:700px){
+  .menu-dock{width:150px;right:10px}
+  .menu-trigger{font-size:9px;padding:8px 10px}
+  .menu-trigger-estado{display:none}
+
+  /* En pantallas chicas el panel se ancla a la barra superior, no al
+     trigger que lo abrió: evita que se salga de la pantalla o quede
+     angosto según qué botón se haya tocado. */
+  .menu-panel{
+    position:fixed;
+    top:calc(var(--bar-h) + 8px);
+    left:12px;
+    right:12px;
+    width:auto;
+    max-width:none;
+    max-height:calc(100vh - var(--bar-h) * 2 - 24px);
   }
-  .specimen{padding:88px 6vw 0}
-  .page{padding:40px 6vw 100px}
-  .grid{grid-template-columns:1fr}
-  .grid.stats{grid-template-columns:repeat(2, minmax(0, 1fr))}
+
+  .data-window{left:8px;top:calc(var(--bar-h) + 8px);width:calc(100vw - 16px);min-width:240px}
+  .blob-frame{margin-bottom:22px}
 }
 
-@media (max-width:600px){
-  h1{font-size:clamp(34px,11vw,52px)}
+@media (max-width:480px){
+  .frame-bar span:last-child,
+  .frame-bar-bottom span:first-child{display:none}
+  .grid{grid-template-columns:1fr}
   .grid.stats{grid-template-columns:1fr}
-  .frame-bar span:last-child{display:none}
-  .obs-meta{font-size:9px}
 }
 
 @media (prefers-reduced-motion:reduce){
-  *{transition:none !important}
+  *{transition:none !important;animation:none !important}
 }
