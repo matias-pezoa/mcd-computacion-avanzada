@@ -299,6 +299,10 @@ void setup() {
 
   mqtt.setServer(MQTT_HOST, MQTT_PORT);
   mqtt.setKeepAlive(30);
+  // El payload de los 3 sensores + el topic superan los 256 bytes por
+  // defecto de PubSubClient (MQTT_MAX_PACKET_SIZE): sin esto, mqtt.publish()
+  // falla EN SILENCIO (no llega nada a la web, sin ningún error visible).
+  mqtt.setBufferSize(512);
   mostrarEstado("MQTT...");
   intentarConectarMQTT(); // un solo intento; si falla, loop() sigue reintentando sin bloquear
 
@@ -382,7 +386,11 @@ void loop() {
     CLIENT_ID, (unsigned long) millis(), accelY, inclinacion,
     cambioBrusco ? "true" : "false", rNorm, gNorm, bNorm, colorHex, dominante, potSuave);
 
-  mqtt.publish(topicEstado, payload);
+  bool publicado = mqtt.publish(topicEstado, payload);
+  if (mqtt.connected() && !publicado) {
+    Serial.printf("[mqtt] publish FALLÓ (paquete ~%d bytes; revisa mqtt.setBufferSize)\n",
+                  (int) (strlen(topicEstado) + strlen(payload)));
+  }
   actualizarPantalla(accelY, inclinacion, cambioBrusco, rNorm, gNorm, bNorm, colorHex, dominante, potSuave, mqtt.connected());
 
   Serial.printf("accelY=%.2f inc=%.1f brusco=%s | color=%s (%s) | pot=%.0f\n",
