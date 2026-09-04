@@ -5,18 +5,18 @@ Sistema conectado que traduce una señal biométrica en distorsión de imagen en
 ## Arquitectura
 
 ```
-ESP32 (pulso/slider) --------------- MQTT (publish) --------------> BROKER --MQTT (subscribe)--> web/ (Canvas)
-       │                                                                                            │
-  regla intensidad/pico (misma lógica en C++, JS bridge y JS cliente) ────────────────────────> main.js (reglas cliente)
+ESP32 (ADXL345 + TCS34725 + potenciómetro) --- MQTT (publish) ---> BROKER --MQTT (subscribe)--> web/ (Canvas)
+                                                                                                    │
+                                                              main.js decide la distorsión por sensor
 ```
 
-El ESP32 se conecta **directamente al broker por WiFi**: no hace falta puente Node ni puerto serie durante una sesión. El puente (`bridge/`) queda como camino alternativo para un Arduino Uno sin WiFi y para la señal simulada.
+El ESP32 se conecta **directamente al broker por WiFi**: no hace falta puente Node ni puerto serie durante una sesión. Cada sensor se publica como un campo independiente; la regla de qué distorsión aplicar vive del lado de la web (`main.js`), no en el instrumento.
 
-- **arduino/instrumento_esp32/** — sketch principal: el ESP32 se conecta a WiFi y al broker MQTT, aplica la regla `intensidad/pico` (port C++ de `bridge/reglas.js`) y publica el mismo mensaje que consume la web. Credenciales en `secrets.h` (copiado de `secrets_example.h`, ignorado por git).
+- **arduino/instrumento_esp32_multisensor/** — sketch activo (el que consume `web/main.js`): acelerómetro ADXL345 (inclinación + cambio brusco), sensor de color TCS34725 (filtro de color) y potenciómetro/SoftPot (dial de amplitud), más una pantalla GC9A01A que muestra los 3 valores en vivo. Credenciales en `secrets.h` (copiado de `secrets_example.h`, ignorado por git).
+- **arduino/instrumento_esp32/** — versión anterior de un solo sensor (`intensidad`/`pico` fusionados). Se mantiene como referencia; `web/main.js` ya no lee ese esquema.
 - **arduino/pulso_sensor.ino** — versión antigua para Arduino Uno: solo imprime `{"valor":N}` por Serial a ~10 Hz y depende de `bridge/`.
-- **bridge/** — puente Node.js opcional: lee el puerto serie del Uno y publica por MQTT. Incluye `simulate.js`, que genera una señal sintética con el mismo esquema para probar el sistema sin hardware.
-- **bridge/reglas.js** — traduce el valor crudo en `{ intensidad, pico }` respecto de una línea base individual que se adapta lentamente. Es la misma regla en la que se apoya `main.js` del lado del navegador y el sketch del ESP32.
-- **web/** — página que se suscribe al topic MQTT y aplica la distorsión sobre un video (cámara o archivo): ruido/grano proporcional a `intensidad`, fragmentación del frame en el instante de un `pico`.
+- **bridge/** — puente Node.js opcional para el Arduino Uno (esquema `intensidad`/`pico`): lee el puerto serie y publica por MQTT, o genera una señal sintética con `simulate.js`. No aplica al sketch multisensor, que publica directo.
+- **web/** — página que se suscribe al topic MQTT y aplica la distorsión sobre un video (cámara o archivo): ruido proporcional a la inclinación, fragmentación en el instante de un cambio brusco, filtro de color superpuesto según el sensor de color, y un dial (potenciómetro) que escala la amplitud de todo lo anterior. El botón "Modo demostración" simula los 3 sensores en el navegador, sin broker.
 
 ## Esquema del mensaje MQTT
 
@@ -24,12 +24,26 @@ Topic: `proyecto/2026/desnaturalizacion-ia/instrumento/<clientId>/estado`
 
 ```json
 {
-  "clientId": "instrumento-a1b2c3",
-  "intensidad": 42.3,
-  "pico": false,
-  "timestamp": 1788381833339
+  "clientId": "instrumento-esp32-01",
+  "timestamp": 1788381833339,
+  "accelY": -3.24,
+  "inclinacion": 42.1,
+  "cambioBrusco": false,
+  "colorR": 182, "colorG": 40, "colorB": 33,
+  "colorHex": "#B62821",
+  "colorDominante": "rojo",
+  "controlValor": 63.0
 }
 ```
+
+Traducción, aplicada en `web/main.js` (sección "04 — REGLAS"):
+
+| Campo | Sensor | Efecto en la web |
+|---|---|---|
+| `inclinacion` (-90 a 90°) | ADXL345, eje Y | ruido/grano proporcional a `\|inclinacion\|` |
+| `cambioBrusco` | ADXL345, salto entre lecturas | fragmentación y recomposición del frame |
+| `controlValor` (0-100) | Potenciómetro / SoftPot | dial manual: escala el ruido y el filtro de color |
+| `colorHex` / `colorDominante` | TCS34725 | filtro de color superpuesto sobre el video |
 
 ## Cómo correrlo
 
@@ -37,14 +51,17 @@ Topic: `proyecto/2026/desnaturalizacion-ia/instrumento/<clientId>/estado`
 
 Usa el broker propio de EMQX Cloud (ver Anexo MQTT del curso Computación Avanzada) o cualquier broker con soporte WSS para el navegador y MQTT/TLS para el puente Node.
 
-### 2 · Instrumento — ESP32 directo al broker (camino principal)
+### 2 · Instrumento — ESP32 multisensor directo al broker (camino principal)
 
-1. Instala el paquete de placas **esp32** (Espressif) y la librería **PubSubClient** (Nick O'Leary) desde el Library Manager de Arduino IDE.
-2. En `arduino/instrumento_esp32/`, copia `secrets_example.h` a `secrets.h` y completa: SSID/clave WiFi, `MQTT_HOST` (solo el dominio, sin `mqtts://`), `MQTT_PORT` (8883 para TLS en la nube, 1883 para un Mosquitto local), usuario, contraseña y `CLIENT_ID`.
-3. Conecta la señal analógica a **GPIO34** (VCC a 3V3, GND a GND). GPIO34 es ADC1: no uses pines ADC2, chocan con el WiFi.
-4. Sube el sketch. El monitor serie (115200 baud) muestra la conexión y cada lectura (`valor / intensidad / pico`).
+1. Instala el paquete de placas **esp32** (Espressif) y, desde el Library Manager de Arduino IDE: **PubSubClient** (Nick O'Leary), **Adafruit GFX Library**, **Adafruit GC9A01A**, **Adafruit Unified Sensor**, **Adafruit ADXL345** y **Adafruit TCS34725**.
+2. En `arduino/instrumento_esp32_multisensor/`, copia `secrets_example.h` a `secrets.h` y completa: SSID/clave WiFi, `MQTT_HOST` (solo el dominio, sin `mqtts://`), `MQTT_PORT` (8883 para TLS en la nube, 1883 para un Mosquitto local), usuario, contraseña y `CLIENT_ID`.
+3. Cablea (ver cabecera del `.ino` para el detalle):
+   - Potenciómetro/SoftPot: wiper → **GPIO34** (ADC1; no uses pines ADC2, chocan con el WiFi), extremos → 3V3 y GND.
+   - ADXL345 + TCS34725 comparten el bus I2C: SDA → **GPIO21**, SCL → **GPIO22**, VCC → 3V3, GND → GND en ambos.
+   - Pantalla redonda GC9A01A (1.28" SPI): SCK→18, MOSI→23, CS→5, DC→17, RST→16, VCC→3V3, GND→GND.
+4. Sube el sketch. El monitor serie (115200 baud) muestra la conexión y cada lectura (`accelY / inc / brusco / color / pot`); la pantalla redonda muestra los 3 sensores en vivo con un punto verde cuando el MQTT está conectado.
 
-`secrets.h` está en `.gitignore`: las credenciales no se suben al repositorio. El ESP32 publica en `proyecto/2026/desnaturalizacion-ia/instrumento/<CLIENT_ID>/estado` — el mismo topic que escucha la web.
+`secrets.h` está en `.gitignore`: las credenciales no se suben al repositorio. El ESP32 publica en `proyecto/2026/desnaturalizacion-ia/instrumento/<CLIENT_ID>/estado` — el mismo topic que escucha la web. (`arduino/instrumento_esp32/` sigue disponible como versión mínima de un solo sensor, sin pantalla ni I2C, si se prefiere partir de ahí.)
 
 ### 2b · Puente Node (alternativo: Arduino Uno sin WiFi, o señal simulada)
 
@@ -72,7 +89,7 @@ Si aún no tienes broker/hardware configurado, el botón **"Modo demostración (
 
 - El flujo `simulate.js → broker → suscriptor` fue probado end-to-end con un broker MQTT local (ver historial de desarrollo en `AI_USAGE.md`): el esquema del mensaje y la detección de picos funcionan como se describe arriba.
 - La página web fue probada con Playwright, con un video de prueba: el modo demostración produce ruido proporcional a la intensidad y fragmentación visible del frame en cada pico, sin errores de consola.
-- **Pendiente de probar con hardware real:** `arduino/instrumento_esp32/` (WiFi + MQTT directo) y el camino alternativo `arduino/pulso_sensor.ino` + `bridge/bridge.js` (puerto serie) — se diseñaron siguiendo el mismo contrato de datos ya validado, pero no se han corrido contra un ESP32/Arduino físico. Antes de la sesión de testing: subir el sketch del ESP32, abrir el monitor serie (115200 baud) y confirmar que aparece `[wifi] conectado`, `[mqtt] conectado` y luego líneas `valor / intensidad / pico` estables; recién entonces abrir la web y conectar al broker.
+- **Pendiente de probar con hardware real:** `arduino/instrumento_esp32_multisensor/` (ADXL345 + TCS34725 + potenciómetro + pantalla GC9A01A, WiFi + MQTT directo) — el esquema del mensaje y la regla de distorsión en `web/main.js` están integrados y listos, pero no se ha corrido contra el hardware físico ni calibrado `UMBRAL_CAMBIO_BRUSCO`/los `ALPHA` de suavizado del `.ino`. Antes de la sesión de testing: subir el sketch, abrir el monitor serie (115200 baud) y confirmar que aparece `[wifi] conectado`, `[mqtt] conectado` y luego líneas `accelY/inc/brusco/color/pot` estables (usar la pantalla para verificar visualmente los 3 sensores); recién entonces abrir la web y conectar al broker. `arduino/instrumento_esp32/` (un sensor) y `arduino/pulso_sensor.ino` + `bridge/bridge.js` (Arduino Uno) quedan como caminos alternativos, ya probados en su propio esquema `intensidad`/`pico`.
 - **Pendiente de probar con un broker real (EMQX Cloud):** el diseño replica exactamente el patrón del Anexo MQTT del curso (mismo puerto WSS 8084, misma librería MQTT.js, mismo formato de conexión), pero no se ha probado contra una cuenta EMQX real desde este entorno.
 
 ## Relación con Taller de Prototipos

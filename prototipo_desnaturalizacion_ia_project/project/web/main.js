@@ -17,21 +17,27 @@
 /* ---------------------------------------------------------- */
 
 const CONFIG = {
-  // Umbral bajo el cual se considera que no hubo respuesta significativa
-  // (bajo affectus): la imagen se preserva como contraste.
+  // Umbral bajo el cual se considera que no hubo respuesta significativa:
+  // la imagen se preserva sin ruido.
   umbralInactividad: 6,
-  // Duración del efecto de fragmentación al detectar un pico (ms).
+  // Duración del efecto de fragmentación al detectar un cambio brusco (ms).
   duracionGlitch: 420,
-  // Velocidad de decaimiento de la intensidad por frame (0-1, más alto = decae más rápido).
+  // Velocidad de decaimiento del ruido por frame (0-1, más alto = decae más rápido).
   decaimiento: 0.06,
+  // Rango del filtro de color: alpha mínima (dial en 0) y máxima (dial al máximo).
+  filtroColorAlphaMin: 0.25,
+  filtroColorAlphaMax: 0.75,
 };
 
 const estado = {
   mqttClient: null,
   conectado: false,
   modoDemo: false,
-  intensidad: 0, // 0-100, valor visible que decae en el tiempo
+  intensidad: 0, // 0-100, ruido visible en pantalla (derivado de la inclinación), decae en el tiempo
+  amplitud: 0, // 0-1, dial manual del potenciómetro/SoftPot: escala ruido y filtro de color
   glitchHasta: 0, // timestamp (performance.now) hasta el cual el glitch está activo
+  colorHex: null, // último color dominante del TCS34725 (null = sensor sin datos aún)
+  colorDominante: "—",
   ultimoClientId: null,
 };
 
@@ -148,41 +154,60 @@ function setEstadoConexion(estadoTexto) {
 
 /* ---------------------------------------------------------- */
 /* 04 — REGLAS: INPUT -> RELACIÓN -> OUTPUT                      */
-/*                                                              */
-/* Payload esperado (ver Prototipo_baja_resolucion_...docx):     */
-/*  {                                                            */
-/*    "clientId": "instrumento-XXXX",                            */
-/*    "intensidad": 0-100,   // magnitud de variación biométrica */
-/*    "pico": true|false,    // respuesta simpática abrupta      */
-/*    "timestamp": 169...                                        */
-/*  }                                                             */
 /*                                                                */
-/* Traducción (Figura 2 del anteproyecto):                       */
-/*  intensidad alta y sostenida -> ruido / grano proporcional     */
-/*  pico       -> fragmentación y recomposición del frame         */
-/*  intensidad bajo umbral -> sin alteración (contraste)          */
+/* Payload esperado (ver arduino/instrumento_esp32_multisensor.ino,  */
+/* esquema v2 — 3 sensores independientes, la web decide la regla):  */
+/*  {                                                                 */
+/*    "clientId": "instrumento-esp32-01",                            */
+/*    "timestamp": 169...,                                           */
+/*    "accelY": -3.24,                                               */
+/*    "inclinacion": 42.1,      // ADXL345, ángulo continuo -90..90°  */
+/*    "cambioBrusco": false,    // salto brusco entre lecturas        */
+/*    "colorR": 182, "colorG": 40, "colorB": 33,                     */
+/*    "colorHex": "#B62821",   // TCS34725, normalizado por "clear"   */
+/*    "colorDominante": "rojo",                                      */
+/*    "controlValor": 63.0      // potenciómetro/SoftPot, dial 0-100  */
+/*  }                                                                 */
+/*                                                                     */
+/* Traducción — cada sensor gobierna un aspecto distinto del glitch:  */
+/*  inclinación (°)         -> ruido/grano, proporcional a |ángulo|    */
+/*  cambioBrusco            -> fragmentación y recomposición del frame*/
+/*  controlValor (dial)     -> amplitud manual: escala ruido y filtro */
+/*  colorHex / colorDominante -> filtro de color superpuesto al video */
 /* ---------------------------------------------------------- */
 
 function procesarMensaje(mensaje) {
-  const intensidad = Math.max(0, Math.min(100, Number(mensaje.intensidad) || 0));
-  const pico = !!mensaje.pico;
-
   estado.ultimoClientId = mensaje.clientId || estado.ultimoClientId;
-  estado.intensidad = Math.max(estado.intensidad, intensidad); // el pico se ve, no se pierde entre frames
 
-  let regla = "sin alteración (bajo affectus)";
-  if (pico) {
+  const inclinacion = Number(mensaje.inclinacion) || 0;
+  const cambioBrusco = !!mensaje.cambioBrusco;
+  const controlValor = Math.max(0, Math.min(100, Number(mensaje.controlValor) || 0));
+  const colorHex = typeof mensaje.colorHex === "string" ? mensaje.colorHex : null;
+  const colorDominante = mensaje.colorDominante || "—";
+
+  estado.amplitud = controlValor / 100;
+  estado.colorHex = colorHex;
+  estado.colorDominante = colorDominante;
+
+  // ruido proporcional al ángulo de inclinación (0-90° -> 0-100), escalado por el dial
+  const intensidadInclinacion = Math.min(100, (Math.abs(inclinacion) / 90) * 100);
+  const intensidad = intensidadInclinacion * estado.amplitud;
+  estado.intensidad = Math.max(estado.intensidad, intensidad); // el cambio brusco se ve, no se pierde entre frames
+
+  let regla = "sin alteración (inclinación estable)";
+  if (cambioBrusco) {
     estado.glitchHasta = performance.now() + CONFIG.duracionGlitch;
-    regla = "pico → fragmentación del frame";
+    regla = "cambio brusco → fragmentación del frame";
   } else if (intensidad > CONFIG.umbralInactividad) {
-    regla = "intensidad → ruido / grano proporcional";
+    regla = `inclinación × control → ruido (${controlValor.toFixed(0)}%)`;
   }
+  if (colorHex) regla += ` · filtro ${colorDominante}`;
 
-  actualizarPanelEstado(mensaje, intensidad, pico, regla);
+  actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante);
   log(
-    `intensidad=${intensidad.toFixed(0)} pico=${pico ? "sí" : "no"} → ${regla}`,
+    `inclinación=${inclinacion.toFixed(0)}° brusco=${cambioBrusco ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
     false,
-    pico
+    cambioBrusco
   );
 }
 
@@ -198,6 +223,14 @@ function procesarMensaje(mensaje) {
 
 let demoInterval = null;
 
+// Colores de referencia (mismo formato que entrega el TCS34725 ya normalizado).
+const COLORES_DEMO = [
+  { hex: "#B62821", dominante: "rojo" },
+  { hex: "#2E9E5B", dominante: "verde" },
+  { hex: "#2B6FD9", dominante: "azul" },
+  { hex: "#9A9A96", dominante: "equilibrado" },
+];
+
 function iniciarModoDemo() {
   if (estado.mqttClient) {
     estado.mqttClient.end(true);
@@ -205,22 +238,38 @@ function iniciarModoDemo() {
   }
   estado.modoDemo = true;
   setEstadoConexion("demo");
-  log("Modo demostración iniciado: la señal biométrica se simula localmente.");
+  log("Modo demostración iniciado: simula acelerómetro, sensor de color y potenciómetro localmente.");
 
-  let base = 20;
+  let inclinacion = 0;
+  let control = 40;
+  let colorIdx = 0;
+
   if (demoInterval) clearInterval(demoInterval);
   demoInterval = setInterval(() => {
-    base += (Math.random() - 0.5) * 12;
-    base = Math.max(0, Math.min(60, base));
-    const ruidoAzar = Math.random() * 15;
-    const esPico = Math.random() < 0.08;
-    const intensidad = esPico ? 80 + Math.random() * 20 : base + ruidoAzar;
+    inclinacion += (Math.random() - 0.5) * 10;
+    inclinacion = Math.max(-80, Math.min(80, inclinacion));
+
+    const cambioBrusco = Math.random() < 0.06;
+    if (cambioBrusco) inclinacion = Math.max(-85, Math.min(85, inclinacion + (Math.random() - 0.5) * 70));
+
+    control += (Math.random() - 0.5) * 6;
+    control = Math.max(0, Math.min(100, control));
+
+    if (Math.random() < 0.02) colorIdx = (colorIdx + 1) % COLORES_DEMO.length;
+    const color = COLORES_DEMO[colorIdx];
 
     procesarMensaje({
       clientId: "demo-local",
-      intensidad,
-      pico: esPico,
       timestamp: Date.now(),
+      accelY: 0,
+      inclinacion,
+      cambioBrusco,
+      colorR: parseInt(color.hex.slice(1, 3), 16),
+      colorG: parseInt(color.hex.slice(3, 5), 16),
+      colorB: parseInt(color.hex.slice(5, 7), 16),
+      colorHex: color.hex,
+      colorDominante: color.dominante,
+      controlValor: control,
     });
   }, 350);
 }
@@ -231,14 +280,20 @@ document.getElementById("btn-demo").addEventListener("click", iniciarModoDemo);
 /* 06 — INTERFAZ + LOG                                          */
 /* ---------------------------------------------------------- */
 
-function actualizarPanelEstado(mensaje, intensidad, pico, regla) {
+function actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
   document.getElementById("stat-raw").textContent = JSON.stringify({
     clientId: mensaje.clientId,
-    intensidad: Math.round(intensidad),
-    pico,
+    inclinacion: Number(inclinacion.toFixed(1)),
+    cambioBrusco,
+    controlValor: Math.round(controlValor),
+    colorHex,
   });
-  document.getElementById("stat-intensidad").textContent = intensidad.toFixed(0);
-  document.getElementById("stat-pico").textContent = pico ? "sí" : "no";
+  document.getElementById("stat-inclinacion").textContent = inclinacion.toFixed(0) + "°";
+  document.getElementById("stat-brusco").textContent = cambioBrusco ? "sí" : "no";
+  document.getElementById("stat-control").textContent = controlValor.toFixed(0);
+  document.getElementById("stat-color").textContent = colorDominante;
+  const swatch = document.getElementById("swatch-color");
+  if (swatch) swatch.style.background = colorHex || "transparent";
   document.getElementById("stat-regla").textContent = regla;
   document.getElementById("bar-intensidad-fill").style.width = intensidad.toFixed(0) + "%";
 }
@@ -320,6 +375,22 @@ function aplicarFragmentacion() {
   }
 }
 
+// Tiñe el frame con el color dominante detectado por el TCS34725. Se usa el
+// modo de composición "color" (toma matiz/saturación del tinte y conserva la
+// luminosidad del video) para que siga leyéndose la imagen debajo del filtro.
+// El dial (controlValor) modula cuánto se nota: nunca desaparece del todo,
+// para que el filtro sea legible como una capa activa del sistema.
+function aplicarFiltroColor(colorHex, amplitud) {
+  if (!colorHex) return;
+  const alpha = CONFIG.filtroColorAlphaMin + (CONFIG.filtroColorAlphaMax - CONFIG.filtroColorAlphaMin) * amplitud;
+  ctx.save();
+  ctx.globalCompositeOperation = "color";
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = colorHex;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.restore();
+}
+
 function loop() {
   dibujarFrameBase();
 
@@ -328,8 +399,9 @@ function loop() {
     aplicarFragmentacion();
   }
   aplicarRuido(estado.intensidad);
+  aplicarFiltroColor(estado.colorHex, estado.amplitud);
 
-  // decaimiento exponencial hacia 0 (la respuesta biométrica no es un estado permanente)
+  // decaimiento exponencial hacia 0 (la inclinación no queda fija en el tiempo)
   estado.intensidad *= 1 - CONFIG.decaimiento;
   if (estado.intensidad < 0.5) estado.intensidad = 0;
 

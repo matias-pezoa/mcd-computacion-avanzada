@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=4" />
+  <link rel="stylesheet" href="style.css?v=5" />
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
@@ -101,11 +101,14 @@
         </div>
         <div class="record-body">
           <div class="grid stats">
-            <div class="stat"><span class="stat-label">Último mensaje</span><span id="stat-raw" class="stat-value">—</span></div>
-            <div class="stat"><span class="stat-label">Intensidad (0–100)</span><span id="stat-intensidad" class="stat-value">0</span></div>
-            <div class="stat"><span class="stat-label">Pico detectado</span><span id="stat-pico" class="stat-value">no</span></div>
-            <div class="stat"><span class="stat-label">Regla aplicada</span><span id="stat-regla" class="stat-value">sin alteración</span></div>
+            <div class="stat"><span class="stat-label">Último mensaje</span><span id="stat-raw" class="stat-value mono-value">—</span></div>
+            <div class="stat"><span class="stat-label">Inclinación (ADXL345)</span><span id="stat-inclinacion" class="stat-value">0°</span></div>
+            <div class="stat"><span class="stat-label">Cambio brusco</span><span id="stat-brusco" class="stat-value">no</span></div>
+            <div class="stat"><span class="stat-label">Control (potenciómetro)</span><span id="stat-control" class="stat-value">0</span></div>
+            <div class="stat"><span class="stat-label">Color dominante (TCS34725)</span><span class="stat-value stat-color-value"><span id="swatch-color" class="swatch"></span><span id="stat-color">—</span></span></div>
+            <div class="stat"><span class="stat-label">Regla aplicada</span><span id="stat-regla" class="stat-value mono-value">sin alteración</span></div>
           </div>
+          <span class="bar-label">Ruido aplicado (inclinación × control)</span>
           <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
         </div>
       </section>

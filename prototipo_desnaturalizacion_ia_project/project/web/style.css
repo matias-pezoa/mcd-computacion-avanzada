@@ -178,7 +178,7 @@ h1{
   grid-template-columns:repeat(2, minmax(0, 1fr));
   gap:18px 24px;
 }
-.grid.stats{grid-template-columns:repeat(4, minmax(0, 1fr))}
+.grid.stats{grid-template-columns:repeat(3, minmax(0, 1fr))}
 
 label{
   display:flex;
@@ -309,7 +309,9 @@ canvas#canvas-out{
   width:100%;
   height:100%;
   display:block;
-  filter:grayscale(1) contrast(1.12) brightness(.98);
+  /* Sin grayscale: el filtro de color del TCS34725 (colorHex) se dibuja a
+     color real dentro del canvas — es la señal, no un adorno de la UI. */
+  filter:contrast(1.08) brightness(.98);
 }
 
 /* ============================================================
@@ -339,8 +341,37 @@ canvas#canvas-out{
   word-break:break-word;
 }
 
-#bar-intensidad-track{
+/* JSON crudo / nombre de la regla: texto largo, más legible en mono */
+.stat-value.mono-value{
+  font-family:var(--font-mono);
+  font-size:11px;
+  font-weight:400;
+  line-height:1.6;
+  letter-spacing:0;
+  color:var(--gray-1);
+}
+
+.stat-color-value{display:flex;align-items:center;gap:10px}
+.swatch{
+  display:inline-block;
+  width:14px;height:14px;
+  border:1px solid var(--line-soft);
+  background:transparent;
+  flex-shrink:0;
+}
+
+.bar-label{
+  display:block;
   margin-top:32px;
+  font-family:var(--font-mono);
+  font-size:10px;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+}
+
+#bar-intensidad-track{
+  margin-top:10px;
   height:6px;
   background:transparent;
   border:1px solid var(--line-soft);
