@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Desnaturalización IA · Prototipo baja resolución</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css?v=12" />
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"></div>
+
+  <header class="frame-bar">
+    <a class="home-link" href="../../../index.html">← Índice</a>
+    <span>Desnaturalización IA — sistema de distorsión</span>
+  </header>
+
+  <!-- Escenario: el video/canvas ocupa toda la pantalla disponible entre las dos barras -->
+  <div class="stage-full">
+    <video id="video-src" autoplay muted playsinline></video>
+    <canvas id="canvas-out"></canvas>
+    <div class="stage-caption" aria-hidden="true">
+      <span>DESNATURALIZACIÓN IA</span>
+      <span>INSTRUMENTO → MQTT → DISTORSIÓN EN VIVO</span>
+    </div>
+  </div>
+
+  <!-- Menús desplegables: controlan el sistema sin ocupar espacio fijo sobre el video -->
+  <nav class="menu-dock" aria-label="Controles del sistema">
+
+    <div class="menu-item">
+      <button class="menu-trigger" type="button" data-target="panel-conexion" aria-expanded="false" aria-controls="panel-conexion">
+        <span><span class="num">01</span>Conexión</span>
+        <span id="trigger-estado-conexion" class="menu-trigger-estado">Desconectado</span>
+      </button>
+      <div class="menu-panel" id="panel-conexion" hidden>
+        <div class="grid">
+          <label>Host (sin protocolo)
+            <input id="in-host" type="text" placeholder="xxxxxxxx.emqxsl.com" autocomplete="off" />
+          </label>
+          <label>Puerto WSS
+            <input id="in-port" type="text" value="8084" autocomplete="off" />
+          </label>
+          <label>Usuario
+            <input id="in-user" type="text" placeholder="usuario-mqtt" autocomplete="off" />
+          </label>
+          <label>Contraseña
+            <input id="in-pass" type="password" placeholder="••••••••" autocomplete="off" />
+          </label>
+          <label class="wide">Topic a escuchar
+            <input id="in-topic" type="text" value="proyecto/2026/desnaturalizacion-ia/instrumento/+/estado" autocomplete="off" />
+          </label>
+        </div>
+        <div class="actions">
+          <button id="btn-connect">Conectar</button>
+          <button id="btn-serial">Conectar por USB (sin MQTT)</button>
+          <span id="estado-conexion" class="badge badge-off">Desconectado</span>
+        </div>
+        <p class="hint">Las credenciales no se guardan ni se suben al repositorio: se piden en pantalla cada vez (ver Anexo MQTT del curso). "Conectar por USB" es una alternativa que no usa MQTT ni WiFi — lee directo del cable USB del ESP32 (requiere Chrome o Edge, y que el Monitor Serie de Arduino IDE esté cerrado).</p>
+      </div>
+    </div>
+
+    <!-- Fuente: un solo botón que activa la cámara directamente, sin menú
+         desplegable. Archivo/demo quedan como acciones mínimas secundarias
+         (texto subrayado, sin caja) para no perder esas rutas de prueba. -->
+    <div class="dock-block">
+      <button class="menu-trigger" id="btn-webcam" type="button">
+        <span><span class="num">02</span>Cámara</span>
+      </button>
+      <div class="fuente-extra">
+        <label class="file-label-mini">Archivo<input id="in-file" type="file" accept="video/*" /></label>
+        <button type="button" id="btn-demo" class="btn-mini">Demo</button>
+        <label class="file-label-mini"><input id="chk-face-glitch" type="checkbox" /> Glitch solo en la cara</label>
+      </div>
+    </div>
+
+    <div class="menu-item">
+      <button class="menu-trigger" type="button" data-target="panel-log" aria-expanded="false" aria-controls="panel-log">
+        <span><span class="num">04</span>Registro</span>
+      </button>
+      <div class="menu-panel" id="panel-log" hidden>
+        <div id="log"></div>
+      </div>
+    </div>
+
+    <!-- Captura: un botón que arma/dispara la grabación de 30s, con una
+         línea de tiempo discreta (sin ventana, sin chrome) que aparece
+         debajo mientras graba y al terminar. -->
+    <div class="dock-block">
+      <button class="menu-trigger" id="btn-capturar" type="button">
+        <span><span class="num">05</span>Captura</span>
+        <span id="capture-estado" class="menu-trigger-estado">Inactivo</span>
+      </button>
+
+      <div class="capture-progreso-mini" id="capture-progreso-mini" hidden>
+        <div id="captura-progreso-track"><div id="captura-progreso-fill"></div></div>
+        <span id="captura-tiempo" class="captura-tiempo">00:00 / 00:30</span>
+      </div>
+
+      <div class="captura-resultado" id="captura-resultado" hidden>
+        <svg id="captura-chart" viewBox="0 0 220 40" preserveAspectRatio="none" aria-hidden="true"></svg>
+        <div class="captura-descargas">
+          <button type="button" id="btn-descargar-video" class="btn-mini">Video</button>
+          <button type="button" id="btn-descargar-datos" class="btn-mini">Datos</button>
+        </div>
+      </div>
+    </div>
+
+  </nav>
+
+  <!-- Visualización de la señal: ventana independiente, no depende de un menú.
+       Se arrastra desde la barra de título y se redimensiona desde la esquina
+       inferior derecha, como una ventana de escritorio. -->
+  <section class="data-window" id="data-window" aria-label="Visualización de la señal">
+    <div class="data-window-bar" id="data-window-bar">
+      <span class="data-window-title">
+        <span class="num">03</span>Señal
+        <span id="trigger-estado-senal" class="menu-trigger-estado">—</span>
+      </span>
+      <button type="button" class="data-window-toggle" id="data-window-toggle" aria-label="Minimizar panel de señal">–</button>
+    </div>
+    <div class="data-window-body">
+      <div class="estado-layout">
+
+        <div class="obs-frame blob-frame">
+          <svg id="blob-viz" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+          <div class="obs-meta">
+            <span class="dim" id="blob-estado-label">FORMA — ESTADO 01</span>
+            <span class="ref">MORFOLOGÍA SEGÚN SEÑAL</span>
+          </div>
+        </div>
+
+        <div class="estado-datos">
+          <div class="grid stats">
+            <div class="stat">
+              <span class="stat-label">Inclinación (ADXL345)</span>
+              <span id="stat-inclinacion" class="stat-value">0°</span>
+              <span class="stat-map">→ rota la forma</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Cambio brusco</span>
+              <span id="stat-brusco" class="stat-value">no</span>
+              <span class="stat-map">→ salta de estado</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Control (potenciómetro)</span>
+              <span id="stat-control" class="stat-value">0</span>
+              <span class="stat-map">→ tamaño / dispersión</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Color dominante (TCS34725)</span>
+              <span class="stat-value stat-color-value"><span id="swatch-color" class="swatch"></span><span id="stat-color">—</span></span>
+              <span class="stat-map">→ degradé de color</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Último mensaje</span>
+              <span id="stat-raw" class="stat-value mono-value">—</span>
+            </div>
+            <div class="stat">
+              <span class="stat-label">Regla aplicada</span>
+              <span id="stat-regla" class="stat-value mono-value">sin alteración</span>
+            </div>
+          </div>
+          <span class="bar-label">Ruido aplicado (inclinación × control)</span>
+          <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <footer class="frame-bar frame-bar-bottom">
+    <span>Javiera - Felipe - Matias</span>
+    <a class="home-link" href="../../../index.html">← Volver al índice</a>
+  </footer>
+
+  <script>
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      var cur = document.querySelector('.cursor');
+      document.body.classList.add('cursor-active');
+      window.addEventListener('pointermove', function (e) {
+        cur.style.left = e.clientX + 'px';
+        cur.style.top = e.clientY + 'px';
+      });
+    }
+  </script>
+  <script src="main.js?v=10"></script>
+</body>
+</html>
