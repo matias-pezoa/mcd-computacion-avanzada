@@ -40,19 +40,23 @@ const CONFIG = {
   // Rango del filtro de color: alpha mínima (dial en 0) y máxima (dial al máximo).
   filtroColorAlphaMin: 0.25,
   filtroColorAlphaMax: 0.75,
-  // Grados de inclinación (|ángulo|) a partir de los cuales el glitch de
-  // fragmentación queda SOSTENIDO mientras se mantenga esa inclinación,
-  // en vez de aparecer solo como flash puntual ante un cambio brusco.
+  // Magnitud del vector de inclinación (|(X,Y)|, en grados) a partir de la
+  // cual el glitch de fragmentación queda SOSTENIDO mientras se mantenga
+  // esa inclinación, en vez de aparecer solo como flash ante un cambio brusco.
   umbralInclinacionGlitch: 40,
   // Glitch avanzado (franjas duplicadas + aberración cromática): cuántas
   // copias de franjas finas se estampan por pasada, y cuántos píxeles se
-  // separan los canales R/B.
+  // separan los canales de color (el desplazamiento ya es 2D: sigue el eje
+  // de inclinación).
   glitchCopias: 8,
   aberracionCromaticaPx: 5,
-  // Eje X del acelerómetro -> escala de los fragmentos duplicados (efecto
-  // de profundidad: más grande = parece venir "hacia adelante"). 1 = sin
-  // efecto, escalaProfundidadMax = tamaño al tope de inclinación en X.
-  escalaProfundidadMax: 1.9,
+  // Profundidad (eje Z del glitch): el instrumento entrega la inclinación en
+  // los DOS ejes con signo (X e Y, -90 a 90). El vector (X,Y) define una
+  // dirección en el plano; su componente de "empuje" (inclinarse hacia atrás
+  // vs. hacia adelante) escala los fragmentos: >1 = vienen hacia el
+  // observador, <1 = se alejan. 1 = neutro.
+  escalaProfundidadMax: 1.9,  // tope al inclinarse "hacia atrás"
+  escalaProfundidadMin: 0.55, // piso al inclinarse "hacia adelante"
   suavizadoProfundidad: 0.15,
 };
 
@@ -62,11 +66,17 @@ const estado = {
   modoDemo: false,
   intensidad: 0, // 0-100, ruido visible en pantalla (derivado de la inclinación), decae en el tiempo
   amplitud: 0, // 0-1, dial manual del potenciómetro/SoftPot: escala ruido y filtro de color
-  inclinacion: 0, // último ángulo Y recibido (°), para el overlay de datos durante la captura
+  inclinacion: 0, // último ángulo Y recibido (°, con signo). + = atrás, - = adelante
+  inclinacionX: 0, // último ángulo X recibido (°, con signo). + = derecha, - = izquierda
   glitchHasta: 0, // timestamp (performance.now) hasta el cual el glitch está activo (flash por cambio brusco)
-  glitchSostenido: false, // true mientras |inclinación| > umbralInclinacionGlitch (glitch continuo, no flash)
-  inclinacionX: 0, // último valor del eje X (-90 a 90)
-  escalaProfundidad: 1, // se acerca suavemente al objetivo derivado de inclinacionX (ver loop)
+  glitchSostenido: false, // true mientras |(X,Y)| > umbralInclinacionGlitch (glitch continuo, no flash)
+  // Vector de inclinación (rango completo de movimiento, no solo su magnitud):
+  movMagnitud: 0, // 0-90, |(X,Y)|
+  movAngulo: 0,   // 0-360°, dirección del vector (0 = derecha, 90 = atrás, 180 = izquierda, 270 = adelante)
+  glitchDirX: 0,  // vector unitario de desplazamiento del glitch (cos del ángulo), se calcula en loop()
+  glitchDirY: 0,  // idem, sin del ángulo
+  glitchMag: 0,   // 0-1, magnitud normalizada, suavizada — intensidad direccional del glitch
+  escalaProfundidad: 1, // eje Z: se acerca suavemente al objetivo derivado del empuje del vector (ver loop)
   colorHex: null, // último color dominante del TCS34725 (null = sensor sin datos aún)
   colorDominante: "—",
   ultimoClientId: null,
@@ -639,31 +649,43 @@ function procesarMensaje(mensaje) {
   estado.colorHex = colorHex;
   estado.colorDominante = colorDominante;
 
-  // ruido proporcional al ángulo de inclinación (0-90° -> 0-100), escalado por el dial
-  const intensidadInclinacion = Math.min(100, (Math.abs(inclinacion) / 90) * 100);
+  // Vector de inclinación: se usa el rango COMPLETO del movimiento (los dos
+  // ejes con signo), no solo la magnitud de un eje. La magnitud del vector
+  // gobierna la intensidad; su dirección, hacia dónde se desplaza el glitch
+  // (ver loop() y aplicarFragmentacion/aplicarFranjasDuplicadas).
+  const magVector = Math.min(90, Math.hypot(inclinacionX, inclinacion));
+  let angVector = Math.atan2(inclinacion, inclinacionX) * 180 / Math.PI;
+  if (angVector < 0) angVector += 360;
+  estado.movMagnitud = magVector;
+  estado.movAngulo = angVector;
+
+  // ruido proporcional a la MAGNITUD del vector de inclinación (0-90° -> 0-100),
+  // escalado por el dial — responde al movimiento en cualquier dirección
+  const intensidadInclinacion = (magVector / 90) * 100;
   const intensidad = intensidadInclinacion * estado.amplitud;
   estado.intensidad = Math.max(estado.intensidad, intensidad); // el cambio brusco se ve, no se pierde entre frames
 
-  // Glitch SOSTENIDO: mientras la inclinación se mantenga más allá del
-  // umbral, la fragmentación queda activa de forma continua (no solo el
-  // flash puntual que dispara cambioBrusco).
-  estado.glitchSostenido = Math.abs(inclinacion) > CONFIG.umbralInclinacionGlitch;
+  // Glitch SOSTENIDO: mientras el vector de inclinación se mantenga más allá
+  // del umbral (en cualquier dirección), la fragmentación queda activa de
+  // forma continua (no solo el flash puntual que dispara cambioBrusco).
+  estado.glitchSostenido = magVector > CONFIG.umbralInclinacionGlitch;
 
+  const rumbo = etiquetaRumbo(angVector, magVector);
   let regla = "sin alteración (inclinación estable)";
   if (cambioBrusco) {
     estado.glitchHasta = performance.now() + CONFIG.duracionGlitch;
     regla = "cambio brusco → fragmentación del frame";
   } else if (estado.glitchSostenido) {
-    regla = `inclinación sostenida (${inclinacion.toFixed(0)}°) → fragmentación continua`;
+    regla = `inclinación sostenida (${magVector.toFixed(0)}° ${rumbo}) → fragmentación continua`;
   } else if (intensidad > CONFIG.umbralInactividad) {
-    regla = `inclinación × control → ruido (${controlValor.toFixed(0)}%)`;
+    regla = `inclinación (${rumbo}) × control → ruido (${controlValor.toFixed(0)}%)`;
   }
   if (colorHex) regla += ` · filtro ${colorDominante}`;
 
   actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, colorHex);
   actualizarPanelEstado(intensidad, cambioBrusco || estado.glitchSostenido, regla, inclinacion, controlValor, colorHex, colorDominante);
   log(
-    `inclinación=${inclinacion.toFixed(0)}° brusco=${cambioBrusco ? "sí" : "no"} sostenido=${estado.glitchSostenido ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
+    `inc=(${inclinacionX.toFixed(0)},${inclinacion.toFixed(0)})° |${magVector.toFixed(0)}° ${rumbo}| brusco=${cambioBrusco ? "sí" : "no"} sostenido=${estado.glitchSostenido ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
     false,
     cambioBrusco
   );
@@ -674,6 +696,9 @@ function procesarMensaje(mensaje) {
     captura.muestras.push({
       t: Number(((performance.now() - captura.inicio) / 1000).toFixed(2)),
       inclinacion: Number(inclinacion.toFixed(1)),
+      inclinacionX: Number(inclinacionX.toFixed(1)),
+      movMagnitud: Number(magVector.toFixed(1)),
+      movAngulo: Number(angVector.toFixed(0)),
       cambioBrusco,
       glitchSostenido: estado.glitchSostenido,
       controlValor: Number(controlValor.toFixed(0)),
@@ -682,6 +707,14 @@ function procesarMensaje(mensaje) {
       intensidad: Number(intensidad.toFixed(1)),
     });
   }
+}
+
+// Etiqueta de rumbo del vector de inclinación (8 direcciones). 0° = derecha,
+// 90° = atrás, 180° = izquierda, 270° = adelante (ver atan2(Y, X) arriba).
+const RUMBOS = ["derecha", "der-atrás", "atrás", "izq-atrás", "izquierda", "izq-adelante", "adelante", "der-adelante"];
+function etiquetaRumbo(ang, mag) {
+  if (mag < 4) return "centro";
+  return RUMBOS[Math.round(ang / 45) % 8];
 }
 
 /* ---------------------------------------------------------- */
@@ -719,14 +752,19 @@ function iniciarModoDemo() {
 
   if (demoInterval) clearInterval(demoInterval);
   demoInterval = setInterval(() => {
-    inclinacion += (Math.random() - 0.5) * 10;
-    inclinacion = Math.max(-80, Math.min(80, inclinacion));
+    // Los dos ejes caminan por su rango completo, independientes, para
+    // ejercitar el glitch en todas las direcciones (no solo su magnitud).
+    inclinacion += (Math.random() - 0.5) * 12;
+    inclinacion = Math.max(-85, Math.min(85, inclinacion));
 
-    inclinacionX += (Math.random() - 0.5) * 8;
-    inclinacionX = Math.max(-80, Math.min(80, inclinacionX));
+    inclinacionX += (Math.random() - 0.5) * 12;
+    inclinacionX = Math.max(-85, Math.min(85, inclinacionX));
 
     const cambioBrusco = Math.random() < 0.06;
-    if (cambioBrusco) inclinacion = Math.max(-85, Math.min(85, inclinacion + (Math.random() - 0.5) * 70));
+    if (cambioBrusco) {
+      inclinacion = Math.max(-85, Math.min(85, inclinacion + (Math.random() - 0.5) * 70));
+      inclinacionX = Math.max(-85, Math.min(85, inclinacionX + (Math.random() - 0.5) * 70));
+    }
 
     control += (Math.random() - 0.5) * 6;
     control = Math.max(0, Math.min(100, control));
@@ -759,7 +797,9 @@ document.getElementById("btn-demo").addEventListener("click", iniciarModoDemo);
 /* ---------------------------------------------------------- */
 
 function actualizarPanelEstado(intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
-  document.getElementById("stat-inclinacion").textContent = inclinacion.toFixed(0) + "°";
+  // Vector completo: magnitud + rumbo (no solo el eje Y con signo).
+  document.getElementById("stat-inclinacion").textContent =
+    `${estado.movMagnitud.toFixed(0)}° ${etiquetaRumbo(estado.movAngulo, estado.movMagnitud)}`;
   document.getElementById("stat-brusco").textContent = cambioBrusco ? "sí" : "no";
   document.getElementById("stat-control").textContent = controlValor.toFixed(0);
   document.getElementById("stat-ruido").textContent = intensidad.toFixed(0) + "%";
@@ -970,10 +1010,15 @@ function aplicarRuido(intensidad) {
 // no fondo. El DESTINO no se recorta a propósito: el desplazamiento puede
 // sacar la franja del óvalo (e incluso del rectángulo) hacia afuera, que es
 // justo el efecto de "glitch que se sale del borde".
-// El eje Y del acelerómetro controla qué tan lejos se desplaza en horizontal.
+// El vector de inclinación (X,Y con signo) da la DIRECCIÓN del desplazamiento
+// —no un azar puramente horizontal—; su magnitud, la intensidad; y la
+// profundidad (empuje Z) lo escala: al inclinarse "hacia el observador" el
+// desplazamiento se agranda.
 function aplicarFragmentacion() {
   const ovalo = ovaloActivo();
-  const factorY = 0.5 + Math.min(1.5, (Math.abs(estado.inclinacion) / 90) * 1.5);
+  const fuerza = 0.5 + estado.glitchMag * 1.6;
+  const dirX = estado.glitchDirX, dirY = estado.glitchDirY;
+  const prof = estado.escalaProfundidad || 1;
 
   for (const region of regionesDeGlitch()) {
     const bandas = 10 + Math.floor(Math.random() * 8);
@@ -991,10 +1036,12 @@ function aplicarFragmentacion() {
       }
       if (sw < 1) continue;
 
-      const desplazamiento = (Math.random() - 0.5) * sw * 0.5 * factorY;
+      const base = sw * 0.5 * fuerza * prof;
+      const dx = dirX * base * (0.5 + Math.random()) + (Math.random() - 0.5) * sw * 0.18;
+      const dy = dirY * region.height * 0.12 * fuerza * (0.5 + Math.random());
       try {
         const franja = ctx.getImageData(sx, y, sw, h);
-        ctx.putImageData(franja, sx + desplazamiento, y); // sin recorte: puede salirse del óvalo
+        ctx.putImageData(franja, sx + dx, y + dy); // sin recorte: puede salirse del óvalo
       } catch (err) {
         // getImageData puede fallar por CORS si el video proviene de otro origen sin CORS habilitado
       }
@@ -1004,15 +1051,16 @@ function aplicarFragmentacion() {
 
 // ---- Glitch avanzado (inspirado en retrato de referencia) ----
 // Dos capas extra sobre aplicarFragmentacion(): (1) franjas finas que se
-// DUPLICAN y estampan varias veces en distintas posiciones (pueden caer
-// fuera del óvalo — es el efecto buscado), con su tamaño escalado por el
-// eje X (sensación de profundidad/"hacia adelante") y su dispersión
-// horizontal escalada por el eje Y — y (2) aberración cromática.
+// DUPLICAN y estampan varias veces (pueden caer fuera del óvalo — es el
+// efecto buscado), con su TAMAÑO escalado por la profundidad (empuje Z del
+// vector: >1 acerca, <1 aleja) y su PARALLAX a lo largo del eje de
+// inclinación — y (2) aberración cromática con separación 2D en ese mismo eje.
 
 function aplicarFranjasDuplicadas(region) {
   const ovalo = ovaloActivo();
-  const factorY = 0.5 + Math.min(1.5, (Math.abs(estado.inclinacion) / 90) * 1.5);
+  const fuerza = 0.5 + estado.glitchMag * 1.6;
   const escala = estado.escalaProfundidad || 1;
+  const dirX = estado.glitchDirX, dirY = estado.glitchDirY;
 
   for (let i = 0; i < CONFIG.glitchCopias; i++) {
     const altoFranja = region.height * (0.03 + Math.random() * 0.07);
@@ -1027,14 +1075,18 @@ function aplicarFranjasDuplicadas(region) {
     }
     if (sw < 1) continue;
 
-    // Tamaño de la copia: escalado por el eje X (más grande = "más cerca").
+    // Tamaño de la copia: escalado por la profundidad (>1 más cerca).
     const anchoDestino = sw * escala;
     const altoDestino = altoFranja * escala;
-    // Posición: dispersión horizontal escalada por el eje Y — puede caer
-    // bien fuera del óvalo/rectángulo original, a propósito.
+    // Parallax: a lo largo del eje de inclinación. El término (escala-1)
+    // separa las copias según profundidad (invierte el sentido al alejarse).
+    const empujeParallax = (escala - 1) * region.width * 0.9 + region.width * 0.5 * fuerza;
     const dx = region.x + region.width / 2 - anchoDestino / 2
-      + (Math.random() - 0.5) * region.width * 1.3 * factorY;
-    const dy = sy - (altoDestino - altoFranja) / 2 + (Math.random() - 0.5) * region.height * 0.3;
+      + dirX * empujeParallax * (0.4 + Math.random() * 0.9)
+      + (Math.random() - 0.5) * region.width * 0.35;
+    const dy = sy - (altoDestino - altoFranja) / 2
+      + dirY * region.height * 0.5 * fuerza * (0.4 + Math.random() * 0.9)
+      + (Math.random() - 0.5) * region.height * 0.2;
 
     try {
       // drawImage del canvas sobre sí mismo: copia una franja ya dibujada
@@ -1047,7 +1099,14 @@ function aplicarFranjasDuplicadas(region) {
 }
 
 function aplicarAberracionCromatica(region) {
-  const d = Math.round(CONFIG.aberracionCromaticaPx);
+  // Separación 2D: el corte R/B se hace a lo largo del eje de inclinación
+  // (no siempre horizontal) y crece con la profundidad y la magnitud del
+  // movimiento — lee como separación estéreo = pista de profundidad.
+  const escalaAb = 0.6 + Math.abs((estado.escalaProfundidad || 1) - 1) * 2.2 + estado.glitchMag * 1.4;
+  const dxs = Math.round(estado.glitchDirX * CONFIG.aberracionCromaticaPx * escalaAb);
+  const dys = Math.round(estado.glitchDirY * CONFIG.aberracionCromaticaPx * escalaAb);
+  if (dxs === 0 && dys === 0) return;
+
   const x0 = Math.max(0, Math.floor(region.x));
   const y0 = Math.max(0, Math.floor(region.y));
   const w = Math.min(canvas.width - x0, Math.ceil(region.width));
@@ -1060,17 +1119,18 @@ function aplicarAberracionCromatica(region) {
     const src = datos.data, out = salida.data;
 
     for (let y = 0; y < h; y++) {
-      const filaBase = y * w;
       for (let x = 0; x < w; x++) {
-        const iOut = (filaBase + x) * 4;
-        const xr = Math.min(w - 1, Math.max(0, x + d));
-        const xb = Math.min(w - 1, Math.max(0, x - d));
-        const iR = (filaBase + xr) * 4;
-        const iG = (filaBase + x) * 4;
-        const iB = (filaBase + xb) * 4;
-        out[iOut] = src[iR];         // canal rojo, muestreado desplazado hacia un lado
-        out[iOut + 1] = src[iG + 1]; // verde, sin desplazar
-        out[iOut + 2] = src[iB + 2]; // azul, muestreado desplazado hacia el lado opuesto
+        const iOut = (y * w + x) * 4;
+        const xr = Math.min(w - 1, Math.max(0, x + dxs));
+        const yr = Math.min(h - 1, Math.max(0, y + dys));
+        const xb = Math.min(w - 1, Math.max(0, x - dxs));
+        const yb = Math.min(h - 1, Math.max(0, y - dys));
+        const iR = (yr * w + xr) * 4;
+        const iG = (y * w + x) * 4;
+        const iB = (yb * w + xb) * 4;
+        out[iOut] = src[iR];         // rojo: muestreado a favor del eje de inclinación
+        out[iOut + 1] = src[iG + 1]; // verde: sin desplazar
+        out[iOut + 2] = src[iB + 2]; // azul: muestreado en contra del eje
         out[iOut + 3] = src[iG + 3];
       }
     }
@@ -1132,7 +1192,8 @@ function dibujarHudGrabacion() {
   ctx.fillStyle = "#c7c7c2";
   const campos = [
     `${seg}s/30.0s`,
-    `INC ${estado.inclinacion.toFixed(0)}°`,
+    `INC ${estado.movMagnitud.toFixed(0)}° ${etiquetaRumbo(estado.movAngulo, estado.movMagnitud)}`,
+    `Z ${(estado.escalaProfundidad || 1).toFixed(2)}`,
     `CTRL ${Math.round(estado.amplitud * 100)}`,
   ];
   campos.forEach((texto) => {
@@ -1155,9 +1216,23 @@ function loop() {
   actualizarDeteccionFacial();
   dibujarFrameBase();
 
-  // Eje X -> escala de profundidad, suavizada para que no salte de golpe.
-  const objetivoProfundidad = 1 + (Math.abs(estado.inclinacionX) / 90) * (CONFIG.escalaProfundidadMax - 1);
+  // --- Eje Z del glitch: profundidad SIGNADA a partir del empuje del vector.
+  // Inclinarse "hacia atrás" (Y+) y "a la derecha" (X+) acerca los fragmentos
+  // (escala > 1); "hacia adelante"/"izquierda" los aleja (escala < 1).
+  const empuje = (estado.inclinacion * 0.7 + estado.inclinacionX * 0.3) / 90; // -1..1
+  const objetivoProfundidad = empuje >= 0
+    ? 1 + empuje * (CONFIG.escalaProfundidadMax - 1)
+    : 1 + empuje * (1 - CONFIG.escalaProfundidadMin);
   estado.escalaProfundidad += (objetivoProfundidad - estado.escalaProfundidad) * CONFIG.suavizadoProfundidad;
+
+  // --- Ejes X/Y del glitch: dirección de desplazamiento = dirección del
+  // vector de inclinación (no un azar puramente horizontal). Magnitud
+  // normalizada y suavizada para que la intensidad no salte frame a frame.
+  const magNorm = estado.movMagnitud / 90;
+  estado.glitchMag += (magNorm - estado.glitchMag) * CONFIG.suavizadoProfundidad;
+  const angRad = estado.movAngulo * Math.PI / 180;
+  estado.glitchDirX = Math.cos(angRad);
+  estado.glitchDirY = Math.sin(angRad);
 
   const glitchActivo = performance.now() < estado.glitchHasta || estado.glitchSostenido;
   if (glitchActivo) {
