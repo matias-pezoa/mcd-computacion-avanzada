@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sesión VJ · Desnaturalización IA</title>
+  <link rel="stylesheet" href="vj.css?v=1" />
+</head>
+<body>
+  <div class="grain" aria-hidden="true"></div>
+  <div class="cursor" aria-hidden="true"></div>
+  <div class="vj-blackout-layer" id="vj-blackout" aria-hidden="true"></div>
+
+  <header class="frame-bar">
+    <a class="home-link" href="../../../index.html">← Índice</a>
+    <span>Lectura cruda de una sesión — visuales generativas, exploración pura</span>
+    <a class="home-link" href="index.html">Instrumento →</a>
+  </header>
+
+  <div class="vj-stage" id="vj-stage">
+    <video id="vj-video" muted playsinline aria-hidden="true"></video>
+    <canvas id="vj-canvas"></canvas>
+
+    <div class="vj-intro" id="vj-intro">
+      <span class="vj-intro-eyebrow">MCD 2026 · EXPLORACIÓN, NO INSTRUMENTO</span>
+      <h1>vj / desnaturalización</h1>
+      <p>
+        Carga el <code>.json</code> que exporta "05 · Captura", el video de esa
+        misma captura (o cámara/archivo cualquiera), o deja correr la señal
+        sintética. No hay lectura correcta: cada "Mutar" reescribe la
+        traducción de dato a imagen — mismo material, resultado distinto.
+      </p>
+    </div>
+
+    <div class="vj-toast" id="vj-toast" aria-live="polite"></div>
+
+    <div class="vj-scrub" id="vj-scrub" hidden>
+      <svg id="vj-scrub-svg" viewBox="0 0 1000 100" preserveAspectRatio="none" aria-hidden="true"></svg>
+      <div class="vj-scrub-head" id="vj-scrub-head"></div>
+    </div>
+  </div>
+
+  <nav class="vj-dock" aria-label="Controles de la sesión VJ">
+    <div class="vj-dock-group">
+      <label class="vj-file">Datos (.json)<input id="vj-file-input" type="file" accept="application/json,.json" /></label>
+      <button type="button" id="vj-btn-demo" class="vj-btn active">Demo sintético</button>
+    </div>
+    <div class="vj-dock-group">
+      <button type="button" id="vj-btn-camara" class="vj-btn">Cámara</button>
+      <label class="vj-file">Video (archivo)<input id="vj-video-input" type="file" accept="video/*" /></label>
+      <button type="button" id="vj-btn-quitar-video" class="vj-btn" disabled>Quitar video</button>
+    </div>
+    <div class="vj-dock-group">
+      <button type="button" id="vj-btn-play" class="vj-btn">Pausa</button>
+      <button type="button" id="vj-btn-loop" class="vj-btn active">Loop</button>
+      <button type="button" id="vj-btn-speed" class="vj-btn">Velocidad 1×</button>
+    </div>
+    <div class="vj-dock-group">
+      <button type="button" id="vj-btn-mutar" class="vj-btn">Mutar visual</button>
+      <button type="button" id="vj-btn-flash" class="vj-btn active">Destellos: mín</button>
+      <button type="button" id="vj-btn-blackout" class="vj-btn">Blackout</button>
+      <button type="button" id="vj-btn-full" class="vj-btn">Pantalla completa</button>
+    </div>
+    <p class="vj-hint">espacio pausa · M muta · L loop · B blackout · F pantalla completa<br />← → desplaza (con datos cargados)</p>
+  </nav>
+
+  <footer class="frame-bar frame-bar-bottom">
+    <span>Javiera Alvear · Matías Pezoa · Felipe Roa — Computación Avanzada 2026</span>
+    <a class="home-link" href="index.html">← Volver al instrumento</a>
+  </footer>
+
+  <script>
+    if (window.matchMedia('(hover:hover) and (pointer:fine)').matches) {
+      var cur = document.querySelector('.cursor');
+      document.body.classList.add('cursor-active');
+      window.addEventListener('pointermove', function (e) {
+        cur.style.left = e.clientX + 'px';
+        cur.style.top = e.clientY + 'px';
+      });
+    }
+  </script>
+  <script src="vj.js"></script>
+</body>
+</html>

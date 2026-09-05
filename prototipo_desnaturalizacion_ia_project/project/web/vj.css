@@ -1,0 +1,211 @@
+/* ============================================================
+   SESIÓN VJ — lectura cruda de una captura (o señal sintética)
+   Página exploratoria, deliberadamente más cruda que style.css:
+   sin dock prolijo, sin menús — un solo escenario y un puñado de
+   botones directos. Reutiliza las tipografías y la base (negro,
+   grano, cursor) del resto del sitio para no desentonar del todo.
+   ============================================================ */
+
+@font-face{
+  font-family:"Anaktoria";
+  src:url("assets/fonts/anaktoria-regular.otf") format("opentype");
+  font-weight:400; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:"Akzidenz Grotesk Next";
+  src:url("assets/fonts/akzidenz-grotesk-next-regular.otf") format("opentype");
+  font-weight:400; font-style:normal; font-display:swap;
+}
+@font-face{
+  font-family:"TT Autonomous Mono Trial";
+  src:url("assets/fonts/tt-autonomous-mono-trial-regular.ttf") format("truetype");
+  font-weight:400; font-style:normal; font-display:swap;
+}
+
+:root{
+  --black:#060606;
+  --white:#f4f4f1;
+  --gray-1:#c7c7c2;
+  --gray-2:#8c8c87;
+  --line-soft:rgba(244,244,241,.28);
+  --line-faint:rgba(244,244,241,.14);
+  --acid:#c1ff72;
+
+  --font-display:"Anaktoria","Oswald","Arial Narrow",Arial,sans-serif;
+  --font-mono:"TT Autonomous Mono Trial","JetBrains Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
+  --font-body:"Akzidenz Grotesk Next",-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+
+  --bar-h:34px;
+}
+
+*{box-sizing:border-box}
+html,body{height:100%}
+html{background:var(--black);overflow:hidden}
+body{
+  margin:0;
+  background:var(--black);
+  color:var(--white);
+  font-family:var(--font-body);
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--white);color:var(--black)}
+
+.grain{
+  position:fixed; inset:0; z-index:1000; pointer-events:none;
+  opacity:.05; mix-blend-mode:overlay;
+  background-image:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+.cursor{
+  position:fixed; top:0; left:0; width:44px; height:44px;
+  transform:translate(-50%,-50%); pointer-events:none; z-index:1001;
+  border:1px solid #fff; background:#fff; mix-blend-mode:difference; display:none;
+}
+body.cursor-active{cursor:none}
+body.cursor-active .cursor{display:block}
+
+/* ---------- barras (idénticas a style.css, sin depender del archivo) ---------- */
+.frame-bar{
+  position:fixed; left:0; right:0; height:var(--bar-h);
+  display:flex; align-items:center; justify-content:space-between;
+  gap:16px;
+  padding:0 20px; background:var(--black);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--gray-1); z-index:900;
+}
+.frame-bar{top:0;border-bottom:1px solid var(--line-soft)}
+.frame-bar-bottom{top:auto;bottom:0;border-bottom:none;border-top:1px solid var(--line-soft)}
+.frame-bar > span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frame-bar .home-link{
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.09em;
+  text-transform:uppercase; color:var(--gray-1); text-decoration:none;
+  transition:color .15s linear; white-space:nowrap;
+}
+.frame-bar .home-link:hover{color:var(--white)}
+a{color:inherit}
+a:focus-visible{outline:1px solid var(--white);outline-offset:3px}
+
+/* ============================================================
+   ESCENARIO
+   ============================================================ */
+.vj-stage{
+  position:fixed; top:var(--bar-h); bottom:var(--bar-h); left:0; right:0;
+  background:#000; overflow:hidden; z-index:1;
+}
+#vj-canvas{width:100%;height:100%;display:block}
+
+/* Intro: se ve hasta que el usuario carga datos, activa el demo o interactúa */
+.vj-intro{
+  position:absolute; inset:0; z-index:3;
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  gap:16px; padding:0 8vw; text-align:center; pointer-events:none;
+  transition:opacity .6s ease;
+}
+.vj-intro[hidden]{display:none}
+.vj-intro.vj-fade{opacity:0}
+.vj-intro-eyebrow{
+  font-family:var(--font-mono); font-size:11px; letter-spacing:.14em;
+  text-transform:uppercase; color:var(--gray-1);
+}
+.vj-intro h1{
+  margin:0; font-family:var(--font-display); font-weight:400;
+  font-size:clamp(36px,8vw,110px); line-height:.94; letter-spacing:normal;
+  text-transform:lowercase; color:var(--acid);
+}
+.vj-intro h1::first-letter{text-transform:uppercase}
+.vj-intro p{
+  margin:0; max-width:520px; font-family:var(--font-mono); font-size:11px;
+  line-height:1.7; letter-spacing:.02em; text-transform:none; color:var(--gray-1);
+}
+.vj-intro code{color:var(--white)}
+
+/* La pieza no expone lecturas de dato en vivo (ni ángulos ni porcentajes):
+   solo un aviso discreto y transitorio para carga de archivos y errores,
+   nunca un readout permanente. */
+.vj-toast{
+  position:absolute; left:20px; bottom:16px; z-index:2;
+  max-width:min(70vw,520px);
+  font-family:var(--font-mono); font-size:10px; letter-spacing:.03em;
+  color:var(--gray-1); text-shadow:0 1px 4px rgba(0,0,0,.9),0 0 14px rgba(0,0,0,.75);
+  pointer-events:none;
+  opacity:0; transition:opacity .5s ease;
+}
+.vj-toast.on{opacity:1}
+.vj-toast.is-error{color:var(--white)}
+.vj-toast.is-error::before{content:"! ";color:var(--acid)}
+
+video#vj-video{display:none}
+
+/* Línea de tiempo: curva de intensidad + cabeza de reproducción, scrubbeable */
+.vj-scrub{
+  position:absolute; left:20px; right:20px; bottom:40px; height:28px; z-index:2;
+  cursor:pointer;
+}
+.vj-scrub[hidden]{display:none}
+.vj-scrub svg{width:100%;height:100%;display:block;opacity:.55}
+.vj-scrub-path{fill:none;stroke:var(--gray-1);stroke-width:1;vector-effect:non-scaling-stroke}
+.vj-scrub-brusco{stroke:var(--acid);stroke-width:1.4;vector-effect:non-scaling-stroke}
+.vj-scrub-head{
+  position:absolute; top:-4px; bottom:-4px; width:1px; left:0;
+  background:var(--white); box-shadow:0 0 6px rgba(244,244,241,.6);
+  pointer-events:none;
+}
+
+/* ============================================================
+   DOCK — botones directos, sin desplegables
+   ============================================================ */
+.vj-dock{
+  position:fixed; top:calc(var(--bar-h) + 14px); right:14px; z-index:800;
+  display:flex; flex-direction:column; gap:10px; width:172px;
+}
+.vj-dock-group{
+  display:flex; flex-direction:column; gap:6px;
+  background:rgba(6,6,6,.7); backdrop-filter:blur(4px); -webkit-backdrop-filter:blur(4px);
+  border:1px solid var(--line-soft); padding:8px;
+}
+.vj-btn{
+  background:transparent; color:var(--gray-1); border:1px solid var(--line-soft);
+  padding:8px 10px; font-family:var(--font-mono); font-size:10px; letter-spacing:.06em;
+  text-transform:uppercase; text-align:left; cursor:pointer;
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  transition:background-color .15s linear,color .15s linear,border-color .15s linear;
+}
+.vj-btn:hover{border-color:var(--line-soft);color:var(--white)}
+.vj-btn.active{background:var(--acid);color:var(--black);border-color:var(--acid)}
+.vj-btn:focus-visible{outline:1px solid var(--white);outline-offset:2px}
+.vj-btn[disabled]{opacity:.35;cursor:not-allowed}
+
+.vj-file{
+  position:relative; overflow:hidden;
+  background:transparent; color:var(--gray-1); border:1px solid var(--line-soft);
+  padding:8px 10px; font-family:var(--font-mono); font-size:10px; letter-spacing:.06em;
+  text-transform:uppercase; cursor:pointer; display:block; text-align:left;
+  transition:border-color .15s linear,color .15s linear;
+}
+.vj-file:hover{color:var(--white)}
+.vj-file input{
+  position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer;
+}
+
+.vj-hint{
+  margin:0; font-family:var(--font-mono); font-size:9px; line-height:1.6;
+  letter-spacing:.02em; color:var(--gray-2);
+}
+
+/* Blackout total: capa por encima de todo — botón de pánico clásico de VJ */
+.vj-blackout-layer{
+  position:fixed; inset:0; background:#000; z-index:950;
+  display:none;
+}
+.vj-blackout-layer.on{display:block}
+
+@media (max-width:760px){
+  .vj-dock{width:150px}
+  .vj-hud{max-width:none;right:20px}
+  .vj-scrub{left:16px;right:16px;bottom:36px}
+  .frame-bar > span{display:none}
+}
+
+@media (prefers-reduced-motion:reduce){
+  .vj-intro{transition:none}
+}

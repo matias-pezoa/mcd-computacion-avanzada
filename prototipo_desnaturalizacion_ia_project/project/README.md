@@ -81,13 +81,15 @@ No se escriben credenciales en el código: se pasan como variables de entorno en
 
 ### 3 · Página web (web/)
 
-Abre `web/index.html` con Live Server (o publícala en GitHub Pages). Es una pantalla única: el video ocupa toda la ventana y los controles viven en menús desplegables (esquina superior derecha) más dos ventanas flotantes (arrastrables y redimensionables, como ventanas de escritorio):
+Abre `web/index.html` con Live Server (o publícala en GitHub Pages). Es una pantalla única: el video ocupa toda la ventana. Los datos en vivo de los 3 sensores (inclinación, cambio brusco, control, ruido, color, regla aplicada) se leen como texto fijo y discreto en la esquina **inferior izquierda** del video — sin panel, sin caja. El resto de los controles viven en el dock (esquina superior derecha) y una ventana flotante:
 
-- **01 · Conexión** (menú) — host, puerto WSS (8084), usuario y contraseña del broker.
-- **02 · Fuente** (menú) — cámara, archivo de video, o **"Modo demostración"** (simula los 3 sensores en el navegador, sin broker ni hardware).
-- **03 · Señal** (ventana, arriba-izq.) — la forma abstracta (metaballs) y los datos crudos de cada sensor.
-- **04 · Registro** (menú) — log de la sesión.
-- **05 · Captura** (ventana, abajo-der.) — graba 30 s del video ya distorsionado (con un HUD de datos horneado en el frame) y, al terminar, dibuja una línea de tiempo (ruido / inclinación / control / color) de cómo evolucionó la señal. Descarga el `.webm` y/o las muestras en `.json`. Requiere un navegador con `canvas.captureStream` + `MediaRecorder` (Chrome/Edge/Firefox recientes).
+- **01 · Conexión** (menú desplegable) — host, puerto WSS (8084), usuario y contraseña del broker.
+- **02 · Cámara** (botón directo) — activa la webcam al toque; "Archivo" y "Demo" quedan como enlaces mínimos al lado (sin menú).
+- **03 · Señal** (ventana flotante, arrastrable/redimensionable, esquina superior izquierda) — solo la forma abstracta (metaballs); disociada de la data, que vive en el texto fijo del punto anterior.
+- **04 · Registro** (menú desplegable) — log de la sesión.
+- **05 · Captura** (botón directo en el dock) — graba 30 s del video ya distorsionado (con un HUD de datos horneado en el frame) y, al terminar, dibuja debajo del botón una línea de tiempo discreta (ruido + color) de cómo evolucionó la señal. Descarga el `.webm` y/o las muestras en `.json`. Requiere un navegador con `canvas.captureStream` + `MediaRecorder` (Chrome/Edge/Firefox recientes).
+
+**Tipografías** (`web/assets/fonts/`, cargadas por `@font-face` en `style.css`): Anaktoria para display/títulos, Akzidenz Grotesk Next para cuerpo de texto, TT Autonomous Mono para elementos permanentes y destacados (barras, dock, data en vivo). El archivo de TT Autonomous Mono es una versión **trial** — antes de publicar el sitio, confirmar la licencia (uso comercial/redistribución) o reemplazarlo por la versión con licencia completa.
 
 ## Estado de verificación
 

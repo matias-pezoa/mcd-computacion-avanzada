@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=12" />
+  <link rel="stylesheet" href="style.css?v=20" />
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
@@ -17,15 +17,44 @@
   <header class="frame-bar">
     <a class="home-link" href="../../../index.html">← Índice</a>
     <span>Desnaturalización IA — sistema de distorsión</span>
+    <a class="home-link vj-nav-link" href="vj.html">Sesión VJ →</a>
   </header>
 
   <!-- Escenario: el video/canvas ocupa toda la pantalla disponible entre las dos barras -->
   <div class="stage-full">
     <video id="video-src" autoplay muted playsinline></video>
     <canvas id="canvas-out"></canvas>
+
+    <!-- Título del proyecto: reemplaza el "sin fuente de video" — ocupa el
+         centro de la pantalla hasta que hay una fuente activa (cámara o
+         archivo), momento en el que se oculta (ver dibujarFrameBase en
+         main.js, que decide su visibilidad cuadro a cuadro). -->
+    <div class="stage-title" id="stage-title">
+      <span class="stage-title-eyebrow">MCD 2026</span>
+      <h1>Artefacto de desnaturalización computacional</h1>
+      <p>Activa 02 · Cámara, carga un archivo, o prueba el modo demostración</p>
+    </div>
+
+    <!-- Firma del sistema: se movió a la esquina inferior DERECHA para dejar
+         libre la izquierda, donde ahora vive la data en vivo (ver abajo). -->
     <div class="stage-caption" aria-hidden="true">
       <span>DESNATURALIZACIÓN IA</span>
       <span>INSTRUMENTO → MQTT → DISTORSIÓN EN VIVO</span>
+    </div>
+
+    <!-- Data en vivo: texto fijo y discreto (sin caja, sin panel), disociado
+         de la forma — la forma vive aparte, en la ventana flotante "03 · Señal". -->
+    <div class="data-readout" aria-live="polite">
+      <div class="data-readout-line">
+        <span class="data-readout-item"><span class="data-readout-label">Inc</span><span id="stat-inclinacion" class="data-readout-value">0°</span></span>
+        <span class="data-readout-item"><span class="data-readout-label">Brusco</span><span id="stat-brusco" class="data-readout-value">no</span></span>
+        <span class="data-readout-item"><span class="data-readout-label">Control</span><span id="stat-control" class="data-readout-value">0</span></span>
+        <span class="data-readout-item"><span class="data-readout-label">Ruido</span><span id="stat-ruido" class="data-readout-value">0%</span></span>
+        <span class="data-readout-item"><span class="data-readout-label">Color</span><span id="swatch-color" class="swatch"></span><span id="stat-color" class="data-readout-value">—</span></span>
+      </div>
+      <div class="data-readout-line data-readout-regla">
+        <span id="stat-regla">Sistema listo</span>
+      </div>
     </div>
   </div>
 
@@ -110,10 +139,11 @@
 
   </nav>
 
-  <!-- Visualización de la señal: ventana independiente, no depende de un menú.
-       Se arrastra desde la barra de título y se redimensiona desde la esquina
-       inferior derecha, como una ventana de escritorio. -->
-  <section class="data-window" id="data-window" aria-label="Visualización de la señal">
+  <!-- Forma de la señal: ventana independiente, disociada de la data (que
+       ahora vive como texto fijo en la esquina inferior izquierda del
+       escenario). Se arrastra desde la barra de título y se redimensiona
+       desde la esquina inferior derecha, como una ventana de escritorio. -->
+  <section class="data-window" id="data-window" aria-label="Forma de la señal">
     <div class="data-window-bar" id="data-window-bar">
       <span class="data-window-title">
         <span class="num">03</span>Señal
@@ -122,57 +152,18 @@
       <button type="button" class="data-window-toggle" id="data-window-toggle" aria-label="Minimizar panel de señal">–</button>
     </div>
     <div class="data-window-body">
-      <div class="estado-layout">
-
-        <div class="obs-frame blob-frame">
-          <svg id="blob-viz" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
-          <div class="obs-meta">
-            <span class="dim" id="blob-estado-label">FORMA — ESTADO 01</span>
-            <span class="ref">MORFOLOGÍA SEGÚN SEÑAL</span>
-          </div>
-        </div>
-
-        <div class="estado-datos">
-          <div class="grid stats">
-            <div class="stat">
-              <span class="stat-label">Inclinación (ADXL345)</span>
-              <span id="stat-inclinacion" class="stat-value">0°</span>
-              <span class="stat-map">→ rota la forma</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Cambio brusco</span>
-              <span id="stat-brusco" class="stat-value">no</span>
-              <span class="stat-map">→ salta de estado</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Control (potenciómetro)</span>
-              <span id="stat-control" class="stat-value">0</span>
-              <span class="stat-map">→ tamaño / dispersión</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Color dominante (TCS34725)</span>
-              <span class="stat-value stat-color-value"><span id="swatch-color" class="swatch"></span><span id="stat-color">—</span></span>
-              <span class="stat-map">→ degradé de color</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Último mensaje</span>
-              <span id="stat-raw" class="stat-value mono-value">—</span>
-            </div>
-            <div class="stat">
-              <span class="stat-label">Regla aplicada</span>
-              <span id="stat-regla" class="stat-value mono-value">sin alteración</span>
-            </div>
-          </div>
-          <span class="bar-label">Ruido aplicado (inclinación × control)</span>
-          <div id="bar-intensidad-track"><div id="bar-intensidad-fill"></div></div>
-        </div>
-
+      <div class="obs-frame blob-frame">
+        <svg id="blob-viz" viewBox="0 0 640 320" preserveAspectRatio="xMidYMid meet" aria-hidden="true"></svg>
+      </div>
+      <div class="obs-meta obs-meta-flow">
+        <span class="dim" id="blob-estado-label">FORMA — ESTADO 01</span>
+        <span class="ref">MORFOLOGÍA SEGÚN SEÑAL</span>
       </div>
     </div>
   </section>
 
   <footer class="frame-bar frame-bar-bottom">
-    <span>Matías Pezoa — Computación Avanzada 2026</span>
+    <span>Javiera Alvear · Matías Pezoa · Felipe Roa — Computación Avanzada 2026</span>
     <a class="home-link" href="../../../index.html">← Volver al índice</a>
   </footer>
 

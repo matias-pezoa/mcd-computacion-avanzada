@@ -63,6 +63,7 @@ const captura = {
 const video = document.getElementById("video-src");
 const canvas = document.getElementById("canvas-out");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const stageTitle = document.getElementById("stage-title");
 
 // El canvas es ahora la pantalla completa (ver .stage-full en style.css):
 // su buffer se ajusta al tamaño real del contenedor en vez de usar una
@@ -449,7 +450,7 @@ function procesarMensaje(mensaje) {
   if (colorHex) regla += ` · filtro ${colorDominante}`;
 
   actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, colorHex);
-  actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante);
+  actualizarPanelEstado(intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante);
   log(
     `inclinación=${inclinacion.toFixed(0)}° brusco=${cambioBrusco ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
     false,
@@ -540,22 +541,15 @@ document.getElementById("btn-demo").addEventListener("click", iniciarModoDemo);
 /* 07 — INTERFAZ + LOG                                          */
 /* ---------------------------------------------------------- */
 
-function actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
-  document.getElementById("stat-raw").textContent = JSON.stringify({
-    clientId: mensaje.clientId,
-    inclinacion: Number(inclinacion.toFixed(1)),
-    cambioBrusco,
-    controlValor: Math.round(controlValor),
-    colorHex,
-  });
+function actualizarPanelEstado(intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
   document.getElementById("stat-inclinacion").textContent = inclinacion.toFixed(0) + "°";
   document.getElementById("stat-brusco").textContent = cambioBrusco ? "sí" : "no";
   document.getElementById("stat-control").textContent = controlValor.toFixed(0);
+  document.getElementById("stat-ruido").textContent = intensidad.toFixed(0) + "%";
   document.getElementById("stat-color").textContent = colorDominante;
   const swatch = document.getElementById("swatch-color");
   if (swatch) swatch.style.background = colorHex || "transparent";
   document.getElementById("stat-regla").textContent = regla;
-  document.getElementById("bar-intensidad-fill").style.width = intensidad.toFixed(0) + "%";
 
   const triggerSenal = document.getElementById("trigger-estado-senal");
   if (triggerSenal) triggerSenal.textContent = colorHex ? colorDominante : "activo";
@@ -572,6 +566,7 @@ function actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclina
 // del dock (Cámara, Captura) comparten la misma clase por estilo, pero no
 // participan del acordeón.
 const menuTriggers = Array.from(document.querySelectorAll(".menu-trigger[data-target]"));
+const menuDock = document.querySelector(".menu-dock");
 
 function cerrarMenus(exceptoBoton) {
   menuTriggers.forEach((btn) => {
@@ -580,6 +575,16 @@ function cerrarMenus(exceptoBoton) {
     const panel = document.getElementById(btn.dataset.target);
     if (panel) panel.hidden = true;
   });
+}
+
+// Con la ventana "03 · Señal" ahora justo debajo del dock, un panel
+// desplegable (Conexión/Registro, 380px de ancho) le queda encima al
+// abrirse. Para que no se vean superpuestos, la ventana se oculta
+// mientras haya algún panel abierto y vuelve a aparecer al cerrarlo.
+function actualizarVisibilidadVentanaSenal() {
+  if (!dataWindow) return;
+  const algunoAbierto = menuTriggers.some((btn) => btn.getAttribute("aria-expanded") === "true");
+  dataWindow.classList.toggle("oculta-por-menu", algunoAbierto);
 }
 
 menuTriggers.forEach((btn) => {
@@ -591,82 +596,58 @@ menuTriggers.forEach((btn) => {
     cerrarMenus(btn);
     btn.setAttribute("aria-expanded", String(!abierto));
     panel.hidden = abierto;
+    actualizarVisibilidadVentanaSenal();
   });
 });
 
 document.addEventListener("click", (e) => {
   if (e.target.closest(".menu-item")) return;
   cerrarMenus(null);
+  actualizarVisibilidadVentanaSenal();
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") cerrarMenus(null);
+  if (e.key === "Escape") {
+    cerrarMenus(null);
+    actualizarVisibilidadVentanaSenal();
+  }
 });
 
 /* ---------------------------------------------------------- */
-/* Ventana flotante "03 · Señal" — arrastrable y redimensionable,   */
-/* como una ventana de escritorio: se deja siempre visible mientras  */
-/* se opera el sistema (a diferencia de los menús, no tiene sentido   */
-/* que se oculte). El tamaño se ajusta con la manija nativa (esquina  */
-/* inferior derecha, CSS resize) y la posición se arrastra desde la   */
-/* barra de título.                                                    */
+/* Ventana "03 · Señal" — fija, mismo ancho que el dock, pegada       */
+/* justo debajo (ver posicionarVentanaSenalBajoDock). No se arrastra   */
+/* ni se redimensiona; solo se puede minimizar. Se opaca mientras hay  */
+/* un panel del dock abierto, para que no queden superpuestas (ver     */
+/* actualizarVisibilidadVentanaSenal más arriba).                       */
 /* ---------------------------------------------------------- */
-
-function habilitarArrastreVentana(win, bar) {
-  let offset = null;
-
-  bar.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".data-window-toggle")) return;
-    const rect = win.getBoundingClientRect();
-    offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    // fija la posición actual en left/top explícitos antes de arrastrar
-    // (algunas ventanas parten ancladas por right/bottom en vez de left/top)
-    win.style.left = rect.left + "px";
-    win.style.top = rect.top + "px";
-    win.style.right = "auto";
-    win.style.bottom = "auto";
-    bar.setPointerCapture(e.pointerId);
-    bar.classList.add("arrastrando");
-  });
-
-  bar.addEventListener("pointermove", (e) => {
-    if (!offset) return;
-    const barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar-h")) || 34;
-    const maxX = Math.max(0, window.innerWidth - win.offsetWidth);
-    const maxY = Math.max(barH, window.innerHeight - barH - win.offsetHeight);
-    const x = Math.min(Math.max(0, e.clientX - offset.x), maxX);
-    const y = Math.min(Math.max(barH, e.clientY - offset.y), maxY);
-    win.style.left = x + "px";
-    win.style.top = y + "px";
-  });
-
-  function soltar() {
-    offset = null;
-    bar.classList.remove("arrastrando");
-  }
-  bar.addEventListener("pointerup", soltar);
-  bar.addEventListener("pointercancel", soltar);
-}
 
 function habilitarMinimizado(win, toggle) {
   toggle.addEventListener("click", () => {
     const minimizado = win.classList.toggle("minimizado");
-    if (minimizado) {
-      // recuerda el alto elegido (si el usuario ya redimensionó la ventana)
-      // para restaurarlo tal cual al des-minimizar
-      win.dataset.prevHeight = win.style.height || "";
-      win.style.height = "";
-    } else if (win.dataset.prevHeight) {
-      win.style.height = win.dataset.prevHeight;
-    }
     toggle.textContent = minimizado ? "▢" : "–";
     toggle.setAttribute("aria-label", minimizado ? "Expandir ventana" : "Minimizar ventana");
   });
 }
 
 const dataWindow = document.getElementById("data-window");
-habilitarArrastreVentana(dataWindow, document.getElementById("data-window-bar"));
 habilitarMinimizado(dataWindow, document.getElementById("data-window-toggle"));
+
+// El ancho y el borde derecho ya quedan alineados con el dock por CSS
+// (comparten --dock-w / --dock-edge); acá solo hace falta calcular el
+// top, porque la altura del dock varía según el contenido y el ancho
+// de pantalla. Se recalcula en cada resize.
+function posicionarVentanaSenalBajoDock() {
+  if (!menuDock || !dataWindow) return;
+  const barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar-h")) || 34;
+  const rect = menuDock.getBoundingClientRect();
+
+  dataWindow.style.top = Math.round(rect.bottom + 10) + "px";
+
+  const disponible = window.innerHeight - rect.bottom - barH - 16;
+  dataWindow.style.maxHeight = Math.max(120, disponible) + "px";
+}
+window.addEventListener("resize", posicionarVentanaSenalBajoDock);
+posicionarVentanaSenalBajoDock();
 
 function log(texto, esError = false, esPico = false) {
   const linea = document.createElement("div");
@@ -688,7 +669,15 @@ function log(texto, esError = false, esPico = false) {
 /* ---------------------------------------------------------- */
 
 function dibujarFrameBase() {
-  if (video.readyState >= 2 && video.videoWidth > 0) {
+  const listo = video.readyState >= 2 && video.videoWidth > 0;
+
+  // El título del proyecto ocupa el centro mientras no hay fuente activa
+  // (ver .stage-title en style.css) — reemplaza el antiguo aviso dibujado
+  // a mano en el canvas. Se decide cuadro a cuadro: si la fuente se corta
+  // (ej. se desconecta la cámara), el título vuelve a aparecer solo.
+  if (stageTitle) stageTitle.hidden = listo;
+
+  if (listo) {
     // "cover": el video llena todo el canvas sin deformarse, recortando
     // el sobrante — necesario ahora que el canvas es la pantalla completa
     // y su proporción no coincide con la del video fuente.
@@ -699,11 +688,6 @@ function dibujarFrameBase() {
   } else {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#555";
-    ctx.font = "16px sans-serif";
-    const texto = "Sin fuente de video — abre el menú 02 · Fuente para elegir cámara o archivo";
-    const ancho = ctx.measureText(texto).width;
-    ctx.fillText(texto, (canvas.width - ancho) / 2, canvas.height / 2);
   }
 }
 

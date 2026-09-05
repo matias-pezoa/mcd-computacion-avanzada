@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Patrón de cuerpo base — generador paramétrico</title>
+  <meta name="description" content="Sistema paramétrico de patrones de moda: patrón de cuerpo base delantero y espalda, editable por medida y exportable a DXF." />
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <div class="app">
+    <aside class="controls">
+      <header class="controls-header">
+        <p class="eyebrow">generador paramétrico de patrones</p>
+        <h1>Patrón de cuerpo base</h1>
+        <p class="lead">
+          Delantero y espalda a partir de tus medidas. Método de trazado:
+          <a href="https://thecopycat.blog/2021/03/01/como-hacer-un-patron-de-cuerpo-base/" target="_blank" rel="noopener">thecopycat.blog</a>.
+        </p>
+      </header>
+
+      <form id="measurement-form"></form>
+
+      <div class="controls-actions">
+        <label class="checkbox-row">
+          <input type="checkbox" id="mirror-toggle" />
+          Ver/exportar pieza completa (espejada sobre el doblez)
+        </label>
+        <button type="button" id="reset-btn" class="btn btn-ghost">Restablecer valores por defecto</button>
+        <button type="button" id="export-btn" class="btn btn-primary">Exportar DXF</button>
+      </div>
+    </aside>
+
+    <main class="canvas-area">
+      <div id="pattern-canvas" class="pattern-canvas"></div>
+      <p class="canvas-note">
+        Línea continua = corte · línea punteada = doblez (centro delantero/espalda) · línea fina = pinza.
+        Medidas en centímetros, sin margen de costura.
+      </p>
+    </main>
+  </div>
+
+  <script type="module" src="./script.js"></script>
+</body>
+</html>
