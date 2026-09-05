@@ -1,15 +1,26 @@
 /* ============================================================
-   Desnaturalización IA — prototipo de baja resolución
-   Sistema de distorsión: MQTT (entrada) -> reglas -> canvas (salida)
+   Desnaturalización IA — instrumento ESP32 multisensor
+   Sistema de distorsión: MQTT / USB (entrada) -> reglas -> canvas (salida)
+
+   Plataforma y estilo gráfico tomados de prototipo_desnaturalizacion_ia_project;
+   se conserva todo el funcionamiento propio del instrumento multisensor:
+     · conexión alternativa por USB / Web Serial (sin MQTT)
+     · reconocimiento facial (MediaPipe) — el glitch sigue a la cara
+     · glitch avanzado: franjas duplicadas + aberración cromática
+     · glitch SOSTENIDO mientras la inclinación se mantiene pasado el umbral
+     · escala de profundidad según el eje X del acelerómetro
+     · espejo horizontal del video (como videollamada)
 
    Estructura del archivo:
    01 — CONFIGURACIÓN
    02 — ESCENA (video + canvas)
+   02b — RECONOCIMIENTO FACIAL (MediaPipe) — glitch solo en la cara
    03 — CONEXIÓN MQTT
+   03b — CONEXIÓN ALTERNATIVA: USB / Web Serial (sin MQTT)
    04 — VISUALIZACIÓN DE LA SEÑAL (forma abstracta / metaballs)
    05 — REGLAS: INPUT -> RELACIÓN -> OUTPUT
    06 — MODO DEMOSTRACIÓN (sin broker)
-   07 — INTERFAZ + LOG (menús, ventanas flotantes)
+   07 — INTERFAZ + LOG (menús, ventana fija)
    08 — RENDER LOOP
    09 — CAPTURA DE SECUENCIA (30 s) + EXPORTAR VIDEO
    ============================================================ */
@@ -33,9 +44,9 @@ const CONFIG = {
   // fragmentación queda SOSTENIDO mientras se mantenga esa inclinación,
   // en vez de aparecer solo como flash puntual ante un cambio brusco.
   umbralInclinacionGlitch: 40,
-  // Glitch avanzado (franjas duplicadas + aberración cromática), inspirado
-  // en un retrato de referencia: cuántas copias de franjas finas se estampan
-  // por pasada, y cuántos píxeles se separan los canales R/B.
+  // Glitch avanzado (franjas duplicadas + aberración cromática): cuántas
+  // copias de franjas finas se estampan por pasada, y cuántos píxeles se
+  // separan los canales R/B.
   glitchCopias: 8,
   aberracionCromaticaPx: 5,
   // Eje X del acelerómetro -> escala de los fragmentos duplicados (efecto
@@ -51,11 +62,11 @@ const estado = {
   modoDemo: false,
   intensidad: 0, // 0-100, ruido visible en pantalla (derivado de la inclinación), decae en el tiempo
   amplitud: 0, // 0-1, dial manual del potenciómetro/SoftPot: escala ruido y filtro de color
-  inclinacion: 0, // último ángulo recibido (°), para el overlay de datos durante la captura
+  inclinacion: 0, // último ángulo Y recibido (°), para el overlay de datos durante la captura
   glitchHasta: 0, // timestamp (performance.now) hasta el cual el glitch está activo (flash por cambio brusco)
   glitchSostenido: false, // true mientras |inclinación| > umbralInclinacionGlitch (glitch continuo, no flash)
-  inclinacionX: 0,          // último valor crudo del eje X (-90 a 90)
-  escalaProfundidad: 1,     // se acerca suavemente al objetivo derivado de inclinacionX (ver loop)
+  inclinacionX: 0, // último valor del eje X (-90 a 90)
+  escalaProfundidad: 1, // se acerca suavemente al objetivo derivado de inclinacionX (ver loop)
   colorHex: null, // último color dominante del TCS34725 (null = sensor sin datos aún)
   colorDominante: "—",
   ultimoClientId: null,
@@ -66,7 +77,7 @@ const CAPTURA_DURACION_MS = 30000;
 const captura = {
   activa: false,
   inicio: 0, // performance.now() al arrancar, para calcular t relativo de cada muestra
-  muestras: [], // [{ t, inclinacion, cambioBrusco, controlValor, colorHex, colorDominante, intensidad }]
+  muestras: [], // [{ t, inclinacion, cambioBrusco, glitchSostenido, controlValor, colorHex, colorDominante, intensidad }]
   mediaRecorder: null,
   chunks: [],
   timeoutId: null,
@@ -80,11 +91,11 @@ const captura = {
 const video = document.getElementById("video-src");
 const canvas = document.getElementById("canvas-out");
 const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const stageTitle = document.getElementById("stage-title");
 
-// El canvas es ahora la pantalla completa (ver .stage-full en style.css):
-// su buffer se ajusta al tamaño real del contenedor en vez de usar una
-// resolución fija, para que la distorsión se dibuje nítida a cualquier
-// tamaño de ventana.
+// El canvas es la pantalla completa (ver .stage-full en style.css): su buffer
+// se ajusta al tamaño real del contenedor en vez de usar una resolución fija,
+// para que la distorsión se dibuje nítida a cualquier tamaño de ventana.
 function ajustarTamanoCanvas() {
   const stage = canvas.parentElement;
   canvas.width = stage.clientWidth;
@@ -450,10 +461,6 @@ function crearBlobSvg() {
 
   const defs = document.createElementNS(SVG_NS, "defs");
 
-  // Filtro "goo": desenfoca y luego endurece el alfa para que los círculos
-  // cercanos se fusionen en una sola silueta orgánica en vez de superponerse
-  // como discos independientes. Región fija a todo el viewBox: así el
-  // desenfoque nunca se recorta, sea cual sea la composición del estado.
   const filtro = document.createElementNS(SVG_NS, "filter");
   filtro.setAttribute("id", "blob-goo");
   filtro.setAttribute("filterUnits", "userSpaceOnUse");
@@ -472,9 +479,6 @@ function crearBlobSvg() {
   blobGroup = document.createElementNS(SVG_NS, "g");
   blobGroup.setAttribute("class", "blob-group");
 
-  // Dos capas idénticas con el mismo filtro: el contorno (negro, círculos
-  // un poco más grandes) queda debajo del relleno con degradé, dando el
-  // efecto de silueta con borde que se ve en la referencia.
   const capaContorno = document.createElementNS(SVG_NS, "g");
   capaContorno.setAttribute("filter", "url(#blob-goo)");
   const capaRelleno = document.createElementNS(SVG_NS, "g");
@@ -577,7 +581,6 @@ function actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, co
     const item = layout[i];
     const par = blobCircles[i];
     if (!item) {
-      // sobran círculos respecto de este estado: se encogen a 0 (se "absorben")
       par.relleno.setAttribute("r", 0);
       par.contorno.setAttribute("r", 0);
       continue;
@@ -594,7 +597,6 @@ function actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, co
     par.contorno.setAttribute("r", r + 6);
   }
 
-  // La inclinación del instrumento rota la forma completa alrededor de su centro.
   blobGroup.setAttribute("transform", `rotate(${inclinacion.toFixed(1)} ${cx0} ${cy0})`);
 
   const paleta = derivarPaletaBlob(colorHex);
@@ -608,25 +610,17 @@ actualizarVisualizacionBlob(0, false, 40, null); // estado inicial, antes del pr
 /* ---------------------------------------------------------- */
 /* 05 — REGLAS: INPUT -> RELACIÓN -> OUTPUT                      */
 /*                                                                */
-/* Payload esperado (ver arduino/instrumento_esp32_multisensor.ino,  */
-/* esquema v2 — 3 sensores independientes, la web decide la regla):  */
-/*  {                                                                 */
-/*    "clientId": "instrumento-esp32-01",                            */
-/*    "timestamp": 169...,                                           */
-/*    "accelY": -3.24,                                               */
-/*    "inclinacion": 42.1,      // ADXL345, ángulo continuo -90..90°  */
-/*    "cambioBrusco": false,    // salto brusco entre lecturas        */
-/*    "colorR": 182, "colorG": 40, "colorB": 33,                     */
-/*    "colorHex": "#B62821",   // TCS34725, normalizado por "clear"   */
-/*    "colorDominante": "rojo",                                      */
-/*    "controlValor": 63.0      // potenciómetro/SoftPot, dial 0-100  */
-/*  }                                                                 */
-/*                                                                     */
-/* Traducción — cada sensor gobierna un aspecto distinto del glitch:  */
-/*  inclinación (°)         -> ruido/grano, proporcional a |ángulo|    */
-/*  cambioBrusco            -> fragmentación y recomposición del frame*/
-/*  controlValor (dial)     -> amplitud manual: escala ruido y filtro */
-/*  colorHex / colorDominante -> filtro de color superpuesto al video */
+/* Payload esperado (ver instrumento_esp32_multisensor.ino):        */
+/*  {                                                               */
+/*    "clientId": "instrumento-esp32-01",                          */
+/*    "timestamp": 169...,                                         */
+/*    "accelX": 1.10, "accelY": -3.24,                             */
+/*    "inclinacionX": 6.4,   // ADXL345 eje X -> escala de profundidad */
+/*    "inclinacion": 42.1,   // ADXL345 eje Y -> ruido + fragmentación */
+/*    "cambioBrusco": false,                                        */
+/*    "colorHex": "#B62821", "colorDominante": "rojo",             */
+/*    "controlValor": 63.0   // potenciómetro/SoftPot, dial 0-100   */
+/*  }                                                               */
 /* ---------------------------------------------------------- */
 
 function procesarMensaje(mensaje) {
@@ -667,7 +661,7 @@ function procesarMensaje(mensaje) {
   if (colorHex) regla += ` · filtro ${colorDominante}`;
 
   actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, colorHex);
-  actualizarPanelEstado(mensaje, intensidad, cambioBrusco || estado.glitchSostenido, regla, inclinacion, controlValor, colorHex, colorDominante);
+  actualizarPanelEstado(intensidad, cambioBrusco || estado.glitchSostenido, regla, inclinacion, controlValor, colorHex, colorDominante);
   log(
     `inclinación=${inclinacion.toFixed(0)}° brusco=${cambioBrusco ? "sí" : "no"} sostenido=${estado.glitchSostenido ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
     false,
@@ -696,8 +690,7 @@ function procesarMensaje(mensaje) {
 /* Genera localmente una señal sintética con el mismo esquema    */
 /* que publicaría el instrumento real, para poder probar y        */
 /* calibrar las reglas de distorsión sin depender del hardware    */
-/* ni de un broker configurado (ver "Sistema de testing" del      */
-/* brief).                                                        */
+/* ni de un broker configurado.                                    */
 /* ---------------------------------------------------------- */
 
 let demoInterval = null;
@@ -765,22 +758,15 @@ document.getElementById("btn-demo").addEventListener("click", iniciarModoDemo);
 /* 07 — INTERFAZ + LOG                                          */
 /* ---------------------------------------------------------- */
 
-function actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
-  document.getElementById("stat-raw").textContent = JSON.stringify({
-    clientId: mensaje.clientId,
-    inclinacion: Number(inclinacion.toFixed(1)),
-    cambioBrusco,
-    controlValor: Math.round(controlValor),
-    colorHex,
-  });
+function actualizarPanelEstado(intensidad, cambioBrusco, regla, inclinacion, controlValor, colorHex, colorDominante) {
   document.getElementById("stat-inclinacion").textContent = inclinacion.toFixed(0) + "°";
   document.getElementById("stat-brusco").textContent = cambioBrusco ? "sí" : "no";
   document.getElementById("stat-control").textContent = controlValor.toFixed(0);
+  document.getElementById("stat-ruido").textContent = intensidad.toFixed(0) + "%";
   document.getElementById("stat-color").textContent = colorDominante;
   const swatch = document.getElementById("swatch-color");
   if (swatch) swatch.style.background = colorHex || "transparent";
   document.getElementById("stat-regla").textContent = regla;
-  document.getElementById("bar-intensidad-fill").style.width = intensidad.toFixed(0) + "%";
 
   const triggerSenal = document.getElementById("trigger-estado-senal");
   if (triggerSenal) triggerSenal.textContent = colorHex ? colorDominante : "activo";
@@ -797,6 +783,7 @@ function actualizarPanelEstado(mensaje, intensidad, cambioBrusco, regla, inclina
 // del dock (Cámara, Captura) comparten la misma clase por estilo, pero no
 // participan del acordeón.
 const menuTriggers = Array.from(document.querySelectorAll(".menu-trigger[data-target]"));
+const menuDock = document.querySelector(".menu-dock");
 
 function cerrarMenus(exceptoBoton) {
   menuTriggers.forEach((btn) => {
@@ -805,6 +792,16 @@ function cerrarMenus(exceptoBoton) {
     const panel = document.getElementById(btn.dataset.target);
     if (panel) panel.hidden = true;
   });
+}
+
+// Con la ventana "03 · Señal" justo debajo del dock, un panel desplegable
+// (Conexión/Registro, 380px de ancho) le queda encima al abrirse. Para que
+// no se vean superpuestos, la ventana se opaca mientras haya algún panel
+// abierto y vuelve a aparecer al cerrarlo.
+function actualizarVisibilidadVentanaSenal() {
+  if (!dataWindow) return;
+  const algunoAbierto = menuTriggers.some((btn) => btn.getAttribute("aria-expanded") === "true");
+  dataWindow.classList.toggle("oculta-por-menu", algunoAbierto);
 }
 
 menuTriggers.forEach((btn) => {
@@ -816,82 +813,55 @@ menuTriggers.forEach((btn) => {
     cerrarMenus(btn);
     btn.setAttribute("aria-expanded", String(!abierto));
     panel.hidden = abierto;
+    actualizarVisibilidadVentanaSenal();
   });
 });
 
 document.addEventListener("click", (e) => {
   if (e.target.closest(".menu-item")) return;
   cerrarMenus(null);
+  actualizarVisibilidadVentanaSenal();
 });
 
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") cerrarMenus(null);
+  if (e.key === "Escape") {
+    cerrarMenus(null);
+    actualizarVisibilidadVentanaSenal();
+  }
 });
 
 /* ---------------------------------------------------------- */
-/* Ventana flotante "03 · Señal" — arrastrable y redimensionable,   */
-/* como una ventana de escritorio: se deja siempre visible mientras  */
-/* se opera el sistema (a diferencia de los menús, no tiene sentido   */
-/* que se oculte). El tamaño se ajusta con la manija nativa (esquina  */
-/* inferior derecha, CSS resize) y la posición se arrastra desde la   */
-/* barra de título.                                                    */
+/* Ventana "03 · Señal" — fija, mismo ancho que el dock, pegada   */
+/* justo debajo (ver posicionarVentanaSenalBajoDock). No se        */
+/* arrastra ni se redimensiona; solo se puede minimizar.           */
 /* ---------------------------------------------------------- */
-
-function habilitarArrastreVentana(win, bar) {
-  let offset = null;
-
-  bar.addEventListener("pointerdown", (e) => {
-    if (e.target.closest(".data-window-toggle")) return;
-    const rect = win.getBoundingClientRect();
-    offset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    // fija la posición actual en left/top explícitos antes de arrastrar
-    // (algunas ventanas parten ancladas por right/bottom en vez de left/top)
-    win.style.left = rect.left + "px";
-    win.style.top = rect.top + "px";
-    win.style.right = "auto";
-    win.style.bottom = "auto";
-    bar.setPointerCapture(e.pointerId);
-    bar.classList.add("arrastrando");
-  });
-
-  bar.addEventListener("pointermove", (e) => {
-    if (!offset) return;
-    const barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar-h")) || 34;
-    const maxX = Math.max(0, window.innerWidth - win.offsetWidth);
-    const maxY = Math.max(barH, window.innerHeight - barH - win.offsetHeight);
-    const x = Math.min(Math.max(0, e.clientX - offset.x), maxX);
-    const y = Math.min(Math.max(barH, e.clientY - offset.y), maxY);
-    win.style.left = x + "px";
-    win.style.top = y + "px";
-  });
-
-  function soltar() {
-    offset = null;
-    bar.classList.remove("arrastrando");
-  }
-  bar.addEventListener("pointerup", soltar);
-  bar.addEventListener("pointercancel", soltar);
-}
 
 function habilitarMinimizado(win, toggle) {
   toggle.addEventListener("click", () => {
     const minimizado = win.classList.toggle("minimizado");
-    if (minimizado) {
-      // recuerda el alto elegido (si el usuario ya redimensionó la ventana)
-      // para restaurarlo tal cual al des-minimizar
-      win.dataset.prevHeight = win.style.height || "";
-      win.style.height = "";
-    } else if (win.dataset.prevHeight) {
-      win.style.height = win.dataset.prevHeight;
-    }
     toggle.textContent = minimizado ? "▢" : "–";
     toggle.setAttribute("aria-label", minimizado ? "Expandir ventana" : "Minimizar ventana");
   });
 }
 
 const dataWindow = document.getElementById("data-window");
-habilitarArrastreVentana(dataWindow, document.getElementById("data-window-bar"));
 habilitarMinimizado(dataWindow, document.getElementById("data-window-toggle"));
+
+// El ancho y el borde derecho ya quedan alineados con el dock por CSS
+// (comparten --dock-w / --dock-edge); acá solo hace falta calcular el top,
+// porque la altura del dock varía según el contenido y el ancho de pantalla.
+function posicionarVentanaSenalBajoDock() {
+  if (!menuDock || !dataWindow) return;
+  const barH = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--bar-h")) || 34;
+  const rect = menuDock.getBoundingClientRect();
+
+  dataWindow.style.top = Math.round(rect.bottom + 10) + "px";
+
+  const disponible = window.innerHeight - rect.bottom - barH - 16;
+  dataWindow.style.maxHeight = Math.max(120, disponible) + "px";
+}
+window.addEventListener("resize", posicionarVentanaSenalBajoDock);
+posicionarVentanaSenalBajoDock();
 
 function log(texto, esError = false, esPico = false) {
   const linea = document.createElement("div");
@@ -907,16 +877,24 @@ function log(texto, esError = false, esPico = false) {
 /* ---------------------------------------------------------- */
 /* 08 — RENDER LOOP                                              */
 /*                                                                */
-/* Cada frame: dibuja el video, aplica ruido proporcional a la   */
-/* intensidad vigente, aplica fragmentación si hay un glitch      */
-/* activo, y decae la intensidad hacia cero.                      */
+/* Cada frame: dibuja el video (espejado), aplica los efectos de  */
+/* glitch (fragmentación, franjas duplicadas, aberración cromática */
+/* y ruido) — restringidos a la cara si el reconocimiento facial   */
+/* está activo — el filtro de color, y decae la intensidad.        */
 /* ---------------------------------------------------------- */
 
 function dibujarFrameBase() {
-  if (video.readyState >= 2 && video.videoWidth > 0) {
-    // "cover": el video llena todo el canvas sin deformarse, recortando
-    // el sobrante — necesario ahora que el canvas es la pantalla completa
-    // y su proporción no coincide con la del video fuente.
+  const listo = video.readyState >= 2 && video.videoWidth > 0;
+
+  // El título del proyecto ocupa el centro mientras no hay fuente activa
+  // (ver .stage-title en style.css). Se decide cuadro a cuadro: si la fuente
+  // se corta (ej. se desconecta la cámara), el título vuelve a aparecer solo.
+  if (stageTitle) stageTitle.hidden = listo;
+
+  if (listo) {
+    // "cover": el video llena todo el canvas sin deformarse, recortando el
+    // sobrante — el canvas es la pantalla completa y su proporción no
+    // coincide con la del video fuente.
     const escala = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
     const w = video.videoWidth * escala;
     const h = video.videoHeight * escala;
@@ -933,17 +911,12 @@ function dibujarFrameBase() {
   } else {
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = "#555";
-    ctx.font = "16px sans-serif";
-    const texto = "Sin fuente de video — abre el menú 02 · Fuente para elegir cámara o archivo";
-    const ancho = ctx.measureText(texto).width;
-    ctx.fillText(texto, (canvas.width - ancho) / 2, canvas.height / 2);
   }
 }
 
 // Devuelve dónde deben aplicarse los efectos de glitch: la(s) región(es) de
 // la cara si el reconocimiento facial está activo y detectó algo, o el
-// canvas completo en cualquier otro caso (comportamiento de siempre).
+// canvas completo en cualquier otro caso.
 function regionesDeGlitch() {
   if (deteccionFacialActiva && carasDetectadas.length > 0) return carasDetectadas;
   return [{ x: 0, y: 0, width: canvas.width, height: canvas.height }];
@@ -959,8 +932,8 @@ function ovaloActivo() {
   return { cx: r.x + r.width / 2, cy: r.y + r.height / 2, rx: r.width / 2, ry: r.height / 2 };
 }
 
-// Ancho del óvalo a la altura y (ecuación de la elipse). Devuelve null si
-// esa altura queda fuera del óvalo.
+// Ancho del óvalo a la altura y (ecuación de la elipse). Devuelve null si esa
+// altura queda fuera del óvalo.
 function anchoOvaloEnY(ovalo, y) {
   const t = (y - ovalo.cy) / ovalo.ry;
   if (Math.abs(t) >= 1) return null;
@@ -996,8 +969,7 @@ function aplicarRuido(intensidad) {
 // cuando el reconocimiento facial está activo — solo se distorsiona "cara",
 // no fondo. El DESTINO no se recorta a propósito: el desplazamiento puede
 // sacar la franja del óvalo (e incluso del rectángulo) hacia afuera, que es
-// justo el efecto de "glitch que se sale del borde" pedido.
-//
+// justo el efecto de "glitch que se sale del borde".
 // El eje Y del acelerómetro controla qué tan lejos se desplaza en horizontal.
 function aplicarFragmentacion() {
   const ovalo = ovaloActivo();
@@ -1118,8 +1090,7 @@ function aplicarGlitchAvanzado() {
 // Tiñe el frame con el color dominante detectado por el TCS34725. Se usa el
 // modo de composición "color" (toma matiz/saturación del tinte y conserva la
 // luminosidad del video) para que siga leyéndose la imagen debajo del filtro.
-// El dial (controlValor) modula cuánto se nota: nunca desaparece del todo,
-// para que el filtro sea legible como una capa activa del sistema.
+// El dial (controlValor) modula cuánto se nota: nunca desaparece del todo.
 function aplicarFiltroColor(colorHex, amplitud) {
   if (!colorHex) return;
   const alpha = CONFIG.filtroColorAlphaMin + (CONFIG.filtroColorAlphaMax - CONFIG.filtroColorAlphaMin) * amplitud;
@@ -1133,8 +1104,7 @@ function aplicarFiltroColor(colorHex, amplitud) {
 
 // Mientras hay una captura en curso, horneamos un HUD de datos directamente
 // en el frame (además de guardar las muestras): así el .webm exportado ya
-// muestra por sí solo cómo varió la señal en el tiempo, sin depender de
-// software externo para reconstruirlo. Se dibuja último, sobre el resto.
+// muestra por sí solo cómo varió la señal en el tiempo. Se dibuja último.
 function dibujarHudGrabacion() {
   if (!captura.activa) return;
 
@@ -1218,20 +1188,16 @@ function loop() {
 }
 
 requestAnimationFrame(loop);
-log("Sistema listo. Conecta al broker o usa el modo demostración para probar las reglas.");
+log("Sistema listo. Conecta al broker, por USB, o usa el modo demostración.");
 
 /* ---------------------------------------------------------- */
 /* 09 — CAPTURA DE SECUENCIA (30 s) + EXPORTAR VIDEO              */
 /*                                                                */
 /* Vive como un botón directo en el dock (sin ventana ni menú): al   */
-/* tocarlo, hace dos cosas en paralelo:                               */
-/*  1) graba el canvas (ya con el HUD horneado) a .webm vía            */
-/*     canvas.captureStream() + MediaRecorder.                         */
-/*  2) guarda cada lectura de sensor que llega mientras graba           */
-/*     (ver el hook al final de procesarMensaje, sección 05).           */
-/* Mientras graba se ve solo una barra de progreso mínima; al           */
-/* terminar, esa barra se reemplaza por una línea de tiempo discreta    */
-/* (SVG chico, sin caja de panel) y los botones de descarga.            */
+/* tocarlo, graba el canvas (ya con el HUD horneado) a .webm vía      */
+/* canvas.captureStream() + MediaRecorder, y guarda cada lectura de   */
+/* sensor que llega mientras graba. Al terminar, dibuja una línea de  */
+/* tiempo discreta y habilita las descargas.                          */
 /* ---------------------------------------------------------- */
 
 const btnCapturar = document.getElementById("btn-capturar");
@@ -1362,7 +1328,7 @@ function dibujarChartCaptura(muestras) {
   svg.innerHTML = "";
   if (!muestras.length) return;
 
-  const W = 220, H = 40, DUR = 30;
+  const W = 220, DUR = 30;
   const yLineaTop = 2, yLineaBottom = 26;
   const yFranja = 30, altoFranja = 8;
   const xDe = (t) => (t / DUR) * W;
@@ -1377,7 +1343,7 @@ function dibujarChartCaptura(muestras) {
   const d = muestras.map((m, i) => `${i === 0 ? "M" : "L"} ${xDe(m.t).toFixed(1)} ${yDe(m.intensidad).toFixed(1)}`).join(" ");
   svg.appendChild(crear("path", { d, class: "chart-line" }));
 
-  muestras.filter((m) => m.cambioBrusco).forEach((m) => {
+  muestras.filter((m) => m.cambioBrusco || m.glitchSostenido).forEach((m) => {
     svg.appendChild(crear("line", { x1: xDe(m.t), y1: yLineaTop, x2: xDe(m.t), y2: yLineaBottom, class: "chart-tick" }));
   });
 
