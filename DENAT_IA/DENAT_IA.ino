@@ -1,5 +1,5 @@
 /*
- * instrumento_esp32_multisensor.ino  (v2 — señales separadas por sensor)
+ * DENAT_IA.ino  (v2 — señales separadas por sensor)
  * -----------------------------------------------------------------
  * Instrumento biométrico de baja resolución — proyecto "Desnaturalización IA"
  *

@@ -610,7 +610,7 @@ actualizarVisualizacionBlob(0, false, 40, null); // estado inicial, antes del pr
 /* ---------------------------------------------------------- */
 /* 05 — REGLAS: INPUT -> RELACIÓN -> OUTPUT                      */
 /*                                                                */
-/* Payload esperado (ver instrumento_esp32_multisensor.ino):        */
+/* Payload esperado (ver DENAT_IA.ino):                             */
 /*  {                                                               */
 /*    "clientId": "instrumento-esp32-01",                          */
 /*    "timestamp": 169...,                                         */
