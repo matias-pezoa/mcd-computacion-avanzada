@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=Oswald:wght@300;400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=25" />
+  <link rel="stylesheet" href="style.css?v=28" />
   <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
 </head>
 <body>
@@ -102,7 +102,19 @@
       <div class="fuente-extra">
         <label class="file-label-mini">Archivo<input id="in-file" type="file" accept="video/*" /></label>
         <button type="button" id="btn-demo" class="btn-mini">Demo</button>
+        <label class="file-label-mini check-mini"><input id="chk-glitch" type="checkbox" checked />Glitch</label>
         <label class="file-label-mini check-mini"><input id="chk-face-glitch" type="checkbox" />Glitch cara</label>
+        <label class="file-label-mini check-mini"><input id="chk-licuar" type="checkbox" />Licuar rostro</label>
+      </div>
+      <div class="licuar-controles" id="licuar-controles" hidden>
+        <label class="slider-mini">
+          <span>Magnitud <span id="val-magnitud">3 · notorio</span></span>
+          <input id="sld-magnitud" type="range" min="1" max="5" step="1" value="3" />
+        </label>
+        <label class="slider-mini">
+          <span>Transición <span id="val-transicion">460 ms</span></span>
+          <input id="sld-transicion" type="range" min="0" max="100" step="1" value="22" />
+        </label>
       </div>
     </div>
 
@@ -177,6 +189,6 @@
       });
     }
   </script>
-  <script src="main.js?v=25"></script>
+  <script src="main.js?v=28"></script>
 </body>
 </html>

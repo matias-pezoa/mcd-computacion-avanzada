@@ -293,6 +293,12 @@ canvas#canvas-out{
 }
 
 .menu-item{position:relative}
+/* El .menu-item que tiene su panel abierto se eleva por encima de los
+   bloques del dock que vienen DESPUÉS en el DOM (Cámara, Registro, Captura):
+   sin esto, esos botones —más tardíos— se pintan sobre el panel desplegado
+   y se ve el solapamiento. main.js también sube el z-index en JS como
+   respaldo para navegadores sin :has(). */
+.menu-item:has(> .menu-trigger[aria-expanded="true"]){z-index:40}
 
 .menu-trigger{
   width:100%;
@@ -337,7 +343,10 @@ canvas#canvas-out{
   max-width:calc(100vw - 28px);
   max-height:calc(100vh - var(--bar-h) * 2 - 64px);
   overflow-y:auto;
-  background:rgba(6,6,6,.94);
+  z-index:5;
+  /* Fondo OPACO (no .94): con el panel translúcido se veían los botones del
+     dock por detrás y parecía un solapamiento. */
+  background:var(--black);
   backdrop-filter:blur(8px);
   -webkit-backdrop-filter:blur(8px);
   border:1px solid var(--line);
@@ -408,6 +417,53 @@ canvas#canvas-out{
   margin:0;
   flex-shrink:0;
   accent-color:var(--white);
+  cursor:pointer;
+}
+
+/* Sliders del licuado (magnitud + velocidad de transición). Sólo visibles
+   con "Licuar rostro" activo (main.js togglea el [hidden]). */
+.licuar-controles{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:10px;
+  padding:10px 2px 2px;
+  border-top:1px solid var(--line-faint);
+}
+.licuar-controles[hidden]{display:none}
+.slider-mini{
+  display:flex;
+  flex-direction:column;
+  gap:5px;
+  font-family:var(--font-mono);
+  font-size:9px;
+  letter-spacing:.05em;
+  text-transform:uppercase;
+  color:var(--gray-2);
+}
+.slider-mini span span{color:var(--white);letter-spacing:0}
+.slider-mini input[type="range"]{
+  -webkit-appearance:none;
+  appearance:none;
+  width:100%;
+  height:2px;
+  background:var(--line-soft);
+  accent-color:var(--white);
+  cursor:pointer;
+}
+.slider-mini input[type="range"]::-webkit-slider-thumb{
+  -webkit-appearance:none;
+  appearance:none;
+  width:10px;height:10px;
+  background:var(--white);
+  border:none;
+  cursor:pointer;
+}
+.slider-mini input[type="range"]::-moz-range-thumb{
+  width:10px;height:10px;
+  background:var(--white);
+  border:none;
+  border-radius:0;
   cursor:pointer;
 }
 

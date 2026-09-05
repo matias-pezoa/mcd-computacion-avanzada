@@ -58,6 +58,12 @@ const CONFIG = {
   escalaProfundidadMax: 1.9,  // tope al inclinarse "hacia atrás"
   escalaProfundidadMin: 0.55, // piso al inclinarse "hacia adelante"
   suavizadoProfundidad: 0.15,
+
+  // Licuar rostro: celdas por lado de la grilla que cubre el bounding box
+  // de la cara (más celdas = warp más suave pero más triángulos por frame).
+  // La magnitud y la velocidad se controlan desde los sliders del dock;
+  // las reglas por emoción están en EMOCIONES / warpVertice.
+  licuarGrilla: 13,
 };
 
 const estado = {
@@ -79,6 +85,9 @@ const estado = {
   escalaProfundidad: 1, // eje Z: se acerca suavemente al objetivo derivado del empuje del vector (ver loop)
   colorHex: null, // último color dominante del TCS34725 (null = sensor sin datos aún)
   colorDominante: "—",
+  emocion: null,   // emoción derivada del matiz del color (ver EMOCIONES) — gobierna el licuado
+  emoSat: 0,       // saturación del color -> intensidad de la deformación
+  emoBrillo: 1,    // brillo/valor del color -> radio / escala de la deformación
   ultimoClientId: null,
 };
 
@@ -197,6 +206,16 @@ document.getElementById("chk-face-glitch").addEventListener("change", (e) => {
   else desactivarDeteccionFacial();
 });
 
+// Interruptor maestro del glitch de canvas (fragmentación + franjas
+// duplicadas + aberración cromática + ruido). Se puede apagar para que no
+// se solape con el licuado del rostro. El filtro de color NO depende de esto
+// (es la señal del sensor, no un efecto de glitch).
+let glitchHabilitado = document.getElementById("chk-glitch").checked;
+document.getElementById("chk-glitch").addEventListener("change", (e) => {
+  glitchHabilitado = e.target.checked;
+  log(glitchHabilitado ? "Glitch activado." : "Glitch apagado (solo licuado / filtro de color).");
+});
+
 // Convierte un rect en coordenadas de VIDEO (las que entrega MediaPipe, en
 // píxeles del video fuente, SIN espejar) a coordenadas de CANVAS, usando el
 // mismo encuadre "cover" que ya usa dibujarFrameBase() más abajo — incluido
@@ -256,6 +275,505 @@ function actualizarDeteccionFacial() {
     width: Math.min(canvas.width, cajaSuave.width + margenX * 2),
     height: Math.min(canvas.height, cajaSuave.height + margenY * 2),
   }];
+}
+
+/* ---------------------------------------------------------- */
+/* 02c — LICUAR ROSTRO (warp de grilla sobre la malla facial)   */
+/*                                                                */
+/* Usa el FaceLandmarker de MediaPipe (malla de 468 puntos, corre  */
+/* 100% en el navegador). Sobre el bounding box de la cara se traza */
+/* una grilla; cada vértice interior se desplaza y el frame se      */
+/* re-dibuja triángulo a triángulo (mapeo afín de textura) — el     */
+/* resultado es un licuado tipo "derretir / inflar / estirar".      */
+/*                                                                   */
+/* Reglas de deformación (ver DEFORMATION_RULES.md):                   */
+/*   RGB sensor -> HSV -> emoción -> regla morfológica -> rostro         */
+/*     Hue        -> emoción                                             */
+/*     Saturation -> intensidad de la deformación (0.2 … 1.0)            */
+/*     Brightness -> radio / escala de la deformación                    */
+/*   Cada emoción tiene una deformación FORMALMENTE distinta            */
+/*   (expandir / caer / comprimir / estirar / torcer / abrir /          */
+/*    disolver / explotar), no el mismo efecto con otra intensidad.     */
+/*   Dos sliders: magnitud (1-5, el último muy exagerado) y velocidad   */
+/*   de transición. Se interpola entre estados y siempre se calcula     */
+/*   desde la geometría facial original (sin acumulación).              */
+/* ---------------------------------------------------------- */
+
+let faceLandmarker = null;
+let licuarActivo = false;
+let landmarksRostro = []; // [{x,y}] en coordenadas de CANVAS (ya espejadas)
+
+// Índices de landmarks (malla de 468 puntos) por zona del rostro.
+const ZONAS_IDX = {
+  ojoIzq:    [33, 133, 159, 145, 158, 153],
+  ojoDer:    [362, 263, 386, 374, 385, 380],
+  cejaIzq:   [65, 66, 70, 105, 107, 55],
+  cejaDer:   [295, 296, 300, 334, 336, 285],
+  nariz:     [1, 4, 6, 197, 195, 5],
+  boca:      [13, 14, 17, 0, 11, 16],
+  bocaIzq:   [61, 76, 62],
+  bocaDer:   [291, 306, 292],
+  mejillaIzq:[50, 101, 118, 205, 137],
+  mejillaDer:[280, 330, 347, 425, 366],
+  frente:    [10, 67, 297, 109, 338, 151],
+  menton:    [152, 148, 377, 176, 400],
+};
+
+// Color -> emoción -> regla morfológica. warp = deformación formalmente
+// distinta; velMul modula el tiempo de transición (viscoso vs. espasmódico).
+const EMOCIONES = [
+  { id: "ira",       etiqueta: "IRA",       hue: [[0, 18], [340, 360]], velMul: 0.45, warp: "comprimir" },
+  { id: "alegria",   etiqueta: "ALEGRÍA",   hue: [[18, 70]],            velMul: 0.8,  warp: "expandir" },
+  { id: "asco",      etiqueta: "ASCO",      hue: [[70, 158]],           velMul: 1.0,  warp: "torcer" },
+  { id: "sorpresa",  etiqueta: "SORPRESA",  hue: [[158, 200]],          velMul: 0.4,  warp: "abrir" },
+  { id: "tristeza",  etiqueta: "TRISTEZA",  hue: [[200, 260]],          velMul: 1.7,  warp: "caer" },
+  { id: "miedo",     etiqueta: "MIEDO",     hue: [[260, 300]],          velMul: 0.6,  warp: "estirar" },
+  { id: "euforia",   etiqueta: "EUFORIA",   hue: [[300, 340]],          velMul: 0.5,  warp: "explotar" },
+];
+const EMOCION_CALMA = { id: "calma", etiqueta: "CALMA", velMul: 2.4, warp: "disolver" };
+
+// RGB -> HSV (h 0-360, s/v 0-1).
+function rgbAHsv(r, g, b) {
+  r /= 255; g /= 255; b /= 255;
+  const max = Math.max(r, g, b), min = Math.min(r, g, b), d = max - min;
+  let h = 0;
+  if (d !== 0) {
+    if (max === r) h = ((g - b) / d) % 6;
+    else if (max === g) h = (b - r) / d + 2;
+    else h = (r - g) / d + 4;
+    h *= 60;
+    if (h < 0) h += 360;
+  }
+  return { h, s: max === 0 ? 0 : d / max, v: max };
+}
+
+// Clasifica un color en { emocion, sat, brillo }. Baja saturación o casi
+// blanco -> CALMA (disolver), sin importar el matiz.
+function clasificarEmocion(colorHex) {
+  if (!colorHex) return { emocion: EMOCION_CALMA, sat: 0, brillo: 1 };
+  const [r, g, b] = hexARgb(colorHex);
+  const { h, s, v } = rgbAHsv(r, g, b);
+  if (s < 0.18) return { emocion: EMOCION_CALMA, sat: s, brillo: v };
+  for (const emo of EMOCIONES) {
+    for (const [lo, hi] of emo.hue) {
+      if (h >= lo && h <= hi) return { emocion: emo, sat: s, brillo: v };
+    }
+  }
+  return { emocion: EMOCION_CALMA, sat: s, brillo: v };
+}
+
+// Estado de la deformación: sliders + crossfade entre emociones.
+const licuar = {
+  nivelMagnitud: 3,        // 1..5 (slider). 5 = muy exagerado.
+  transicionMs: 460,       // slider de velocidad de transición
+  emoActual: EMOCION_CALMA,
+  emoAnterior: EMOCION_CALMA,
+  mezcla: 1,               // 0..1 avance del crossfade emoAnterior -> emoActual
+  ultimoFrame: 0,
+};
+// Ganancia por nivel del slider: el último salto es desproporcionado a
+// propósito (deformación "muy exagerada").
+const GANANCIA_MAGNITUD = [0.4, 0.75, 1.3, 2.4, 4.6];
+
+// Canvas fuera de pantalla: guarda la copia LIMPIA de la región de la cara
+// que se usa como textura al re-dibujar la grilla deformada.
+const texLicuar = document.createElement("canvas");
+const texLicuarCtx = texLicuar.getContext("2d", { willReadFrequently: false });
+
+async function activarLicuar() {
+  if (faceLandmarker) { licuarActivo = true; return; }
+  log("Cargando malla facial (MediaPipe FaceLandmarker)…");
+  try {
+    const { FaceLandmarker, FilesetResolver } = await import(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/vision_bundle.mjs"
+    );
+    const fileset = await FilesetResolver.forVisionTasks(
+      "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+    );
+    faceLandmarker = await FaceLandmarker.createFromOptions(fileset, {
+      baseOptions: {
+        modelAssetPath:
+          "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+        delegate: "CPU",
+      },
+      runningMode: "VIDEO",
+      numFaces: 1,
+    });
+    licuarActivo = true;
+    log("Malla facial lista. El color define la emoción (rojo=ira · amarillo=alegría · verde=asco · cian=sorpresa · azul=tristeza · violeta=miedo · magenta=euforia · gris=calma); usa los sliders de magnitud y transición.");
+    if (glitchHabilitado) log("Sugerencia: apaga 'Glitch' para que no se solape con el licuado.");
+  } catch (err) {
+    log("No se pudo cargar la malla facial: " + err.message, true);
+    const chk = document.getElementById("chk-licuar");
+    if (chk) chk.checked = false;
+    licuarActivo = false;
+  }
+}
+
+function desactivarLicuar() {
+  licuarActivo = false;
+  landmarksRostro = [];
+  log("Licuar rostro desactivado.");
+}
+
+document.getElementById("chk-licuar").addEventListener("change", (e) => {
+  document.getElementById("licuar-controles").hidden = !e.target.checked;
+  if (e.target.checked) activarLicuar();
+  else desactivarLicuar();
+});
+
+// --- Sliders del licuado: magnitud (1-5, el último salto muy exagerado) y
+//     velocidad de la transición entre emociones.
+const NIVELES_MAGNITUD = ["1 · sutil", "2 · leve", "3 · notorio", "4 · fuerte", "5 · extremo"];
+const sldMagnitud = document.getElementById("sld-magnitud");
+const sldTransicion = document.getElementById("sld-transicion");
+
+function aplicarSliderMagnitud() {
+  licuar.nivelMagnitud = parseInt(sldMagnitud.value, 10);
+  document.getElementById("val-magnitud").textContent = NIVELES_MAGNITUD[licuar.nivelMagnitud - 1];
+}
+function aplicarSliderTransicion() {
+  // 0..100 -> 120..1800 ms
+  licuar.transicionMs = Math.round(120 + (parseInt(sldTransicion.value, 10) / 100) * 1680);
+  document.getElementById("val-transicion").textContent = licuar.transicionMs + " ms";
+}
+sldMagnitud.addEventListener("input", aplicarSliderMagnitud);
+sldTransicion.addEventListener("input", aplicarSliderTransicion);
+aplicarSliderMagnitud();
+aplicarSliderTransicion();
+
+// Corre una vez por frame: pide la malla y la pasa a coordenadas de canvas
+// con el MISMO encuadre "cover" + espejo que usa dibujarFrameBase().
+function actualizarMallaFacial() {
+  if (!licuarActivo || !faceLandmarker) return;
+  if (video.readyState < 2 || video.videoWidth === 0) return;
+
+  let resultado;
+  try {
+    resultado = faceLandmarker.detectForVideo(video, performance.now());
+  } catch (err) {
+    return;
+  }
+  const caras = resultado.faceLandmarks || [];
+  if (caras.length === 0) { landmarksRostro = []; return; }
+
+  const escala = Math.max(canvas.width / video.videoWidth, canvas.height / video.videoHeight);
+  const w = video.videoWidth * escala;
+  const h = video.videoHeight * escala;
+  const offX = (canvas.width - w) / 2;
+  const offY = (canvas.height - h) / 2;
+
+  landmarksRostro = caras[0].map((pt) => ({
+    x: offX + w - pt.x * w, // espejo horizontal (igual que el drawImage del frame)
+    y: offY + pt.y * h,
+  }));
+}
+
+function centroideRasgo(pts, idx) {
+  let sx = 0, sy = 0, n = 0;
+  for (const i of idx) {
+    const p = pts[i];
+    if (!p) continue;
+    sx += p.x; sy += p.y; n++;
+  }
+  return n ? { x: sx / n, y: sy / n } : { x: 0, y: 0 };
+}
+
+// Dibuja el triángulo de textura (s0,s1,s2, en coords de canvas) sobre el
+// triángulo destino (d0,d1,d2) mediante una transformación afín. bx,by = origen
+// del recorte de textura dentro del canvas.
+function dibujarTrianguloLicuar(s0, s1, s2, d0, d1, d2, bx, by) {
+  const u0 = s0.x - bx, v0 = s0.y - by;
+  const u1 = s1.x - bx, v1 = s1.y - by;
+  const u2 = s2.x - bx, v2 = s2.y - by;
+  const den = (u1 - u0) * (v2 - v0) - (u2 - u0) * (v1 - v0);
+  if (Math.abs(den) < 1e-6) return;
+
+  const a = ((d1.x - d0.x) * (v2 - v0) - (d2.x - d0.x) * (v1 - v0)) / den;
+  const b = ((d2.x - d0.x) * (u1 - u0) - (d1.x - d0.x) * (u2 - u0)) / den;
+  const c = ((d1.y - d0.y) * (v2 - v0) - (d2.y - d0.y) * (v1 - v0)) / den;
+  const d = ((d2.y - d0.y) * (u1 - u0) - (d1.y - d0.y) * (u2 - u0)) / den;
+  const e = d0.x - a * u0 - b * v0;
+  const f = d0.y - c * u0 - d * v0;
+
+  ctx.save();
+  ctx.beginPath();
+  // triángulo destino inflado ~0.6px hacia afuera para tapar las costuras
+  const cx = (d0.x + d1.x + d2.x) / 3, cy = (d0.y + d1.y + d2.y) / 3;
+  const infla = (p) => {
+    const dx = p.x - cx, dy = p.y - cy, l = Math.hypot(dx, dy) || 1;
+    return { x: p.x + (dx / l) * 0.6, y: p.y + (dy / l) * 0.6 };
+  };
+  const i0 = infla(d0), i1 = infla(d1), i2 = infla(d2);
+  ctx.moveTo(i0.x, i0.y);
+  ctx.lineTo(i1.x, i1.y);
+  ctx.lineTo(i2.x, i2.y);
+  ctx.closePath();
+  ctx.clip();
+  ctx.setTransform(a, c, b, d, e, f);
+  ctx.drawImage(texLicuar, 0, 0);
+  ctx.restore();
+}
+
+// Campo de desplazamiento de UNA emoción para UN vértice. Todo se calcula
+// desde la geometría original (px,py); nada se acumula entre frames.
+// ctx: { cx, cy, W, H, u, v, z (zonas), t, g (px base de desplazamiento), radio }
+function warpVertice(emo, px, py, ctx) {
+  const { cx, cy, W, H, u, v, z, t, g, radio } = ctx;
+  const rx = px - cx, ry = py - cy;
+  const d = Math.hypot(rx, ry) || 1;
+  const nx = rx / d, ny = ry / d;
+  const R = W * 0.62 * radio;
+  const fall = Math.max(0, 1 - d / R);
+  const k = fall * fall;
+  let dx = 0, dy = 0;
+  // Empuje radial hacia/desde una zona (amt>0 infla, amt<0 hunde).
+  const inf = (zona, rad, amt) => {
+    const c = z[zona];
+    if (!c) return;
+    const ex = px - c.x, ey = py - c.y, ed = Math.hypot(ex, ey);
+    const rr = W * rad * radio;
+    if (ed >= rr || ed < 1e-3) return;
+    const ek = (1 - ed / rr) ** 2;
+    dx += (ex / ed) * ek * g * amt;
+    dy += (ey / ed) * ek * g * amt;
+  };
+
+  switch (emo.warp) {
+    case "expandir": { // ALEGRÍA — EXPAND: arriba y afuera, pulsante, simétrico
+      const puls = 1 + 0.18 * Math.sin(t * 0.011);
+      dx += nx * k * g * 0.30 * puls;
+      dy += ny * k * g * 0.30 * puls - k * g * 0.14; // sesgo hacia arriba
+      inf("mejillaIzq", 0.24, 0.55); inf("mejillaDer", 0.24, 0.55);
+      inf("ojoIzq", 0.16, 0.4); inf("ojoDer", 0.16, 0.4);
+      inf("boca", 0.24, 0.5);
+      if (z.bocaIzq && py > z.bocaIzq.y - H * 0.05 && px < cx) dy -= g * 0.35 * k; // elevar comisura
+      if (z.bocaDer && py > z.bocaDer.y - H * 0.05 && px > cx) dy -= g * 0.35 * k;
+      break;
+    }
+    case "caer": { // TRISTEZA — FALL: rasgos abajo, mandíbula elongada, cara angosta
+      dy += v * v * g * 1.05;
+      if (v > 0.42) dy += (v - 0.42) * H * 0.5 * (g / (W * 0.16));
+      dx += -rx * 0.16 * fall;                 // reducir ancho facial
+      inf("ojoIzq", 0.16, -0.25); inf("ojoDer", 0.16, -0.25);
+      inf("boca", 0.24, -0.3);
+      inf("menton", 0.3, 0.4);
+      dy += Math.sin(py * 0.03 + t * 0.001) * g * 0.08 * v; // viscoso, lento
+      break;
+    }
+    case "comprimir": { // IRA — COMPRESS: al centro, cejas abajo/adentro, boca ancha, espasmo
+      dx += -rx * 0.24 * fall;
+      dy += -ry * 0.20 * fall;
+      inf("cejaIzq", 0.18, -0.5); inf("cejaDer", 0.18, -0.5);
+      if (v < 0.42) dx += Math.sign(cx - px || 1) * k * g * 0.14; // cejas/frente hacia adentro
+      // boca estirada en horizontal, comprimida en vertical
+      if (z.boca) {
+        const db = Math.hypot(px - z.boca.x, py - z.boca.y);
+        const rb = W * 0.3 * radio;
+        if (db < rb) {
+          const kb = (1 - db / rb) ** 2;
+          dx += Math.sign(px - z.boca.x || 1) * g * 0.55 * kb;
+          dy += (z.boca.y - py) * 0.4 * kb;
+        }
+      }
+      // mandíbula ensanchada
+      if (v > 0.6) dx += Math.sign(rx || 1) * (v - 0.6) * W * 0.5 * (g / (W * 0.16));
+      // movimiento rápido y espasmódico
+      dx += (Math.sin(t * 0.05) + (Math.random() - 0.5) * 1.4) * g * 0.07 * fall;
+      dy += Math.cos(t * 0.045) * g * 0.05 * fall;
+      break;
+    }
+    case "estirar": { // MIEDO — STRETCH radial: magnifica la distancia al centro
+      dx += nx * d * 0.010 * (g / (W * 0.16)) * (0.6 + radio);
+      dy += ny * d * 0.010 * (g / (W * 0.16)) * (0.6 + radio);
+      inf("ojoIzq", 0.18, 0.7); inf("ojoDer", 0.18, 0.7);
+      // boca estirada en vertical
+      if (z.boca) {
+        const db = Math.hypot(px - z.boca.x, py - z.boca.y), rb = W * 0.26 * radio;
+        if (db < rb) dy += (py - z.boca.y) * 0.6 * (1 - db / rb) ** 2;
+      }
+      if (v < 0.34) dy -= (0.34 - v) * H * 0.32 * (g / (W * 0.16)); // frente arriba
+      if (v > 0.62) dy += (v - 0.62) * H * 0.36 * (g / (W * 0.16)); // mandíbula abajo
+      // temblor de alta frecuencia
+      dx += (Math.random() - 0.5) * W * 0.04 * (g / (W * 0.16));
+      dy += (Math.random() - 0.5) * W * 0.04 * (g / (W * 0.16));
+      break;
+    }
+    case "torcer": { // ASCO — TWIST lateral + máxima asimetría
+      const ang = k * 0.9 * (g / (W * 0.16)) * (0.7 + 0.3 * Math.sin(t * 0.006));
+      dx += (rx * Math.cos(ang) - ry * Math.sin(ang)) - rx;
+      dy += (rx * Math.sin(ang) + ry * Math.cos(ang)) - ry;
+      const irr = 0.7 + 0.3 * Math.sin(t * 0.004 + 1.3);
+      if (px < cx) dx += -rx * 0.14 * fall * irr;      // comprimir mejilla izquierda
+      else dx += rx * 0.16 * fall * irr;               // expandir la derecha
+      inf("nariz", 0.16, 0);
+      if (z.nariz) { // nariz y labios torcidos lateralmente
+        const dn = Math.hypot(px - z.nariz.x, py - z.nariz.y), rn = W * 0.22 * radio;
+        if (dn < rn) dx += g * 0.5 * (1 - dn / rn) ** 2 * (py < z.nariz.y ? 1 : -1);
+      }
+      break;
+    }
+    case "abrir": { // SORPRESA — OPEN radial: apertura, ojos y boca circulares grandes
+      dx += nx * k * g * 0.38;
+      dy += ny * k * g * 0.38;
+      inf("ojoIzq", 0.2, 0.85); inf("ojoDer", 0.2, 0.85);
+      inf("boca", 0.22, 0.9);
+      inf("cejaIzq", 0.16, 0);
+      if (v < 0.4) dy -= (0.4 - v) * H * 0.28 * (g / (W * 0.16)); // cejas / frente arriba
+      break;
+    }
+    case "disolver": { // CALMA — DISSOLVE: rasgos hacia el centro, suave, muy lento
+      const osc = 0.5 + 0.5 * Math.sin(t * 0.0022);
+      dx += -rx * 0.12 * osc;
+      dy += -ry * 0.12 * osc;
+      inf("ojoIzq", 0.18, -0.18); inf("ojoDer", 0.18, -0.18);
+      inf("boca", 0.22, -0.2); inf("nariz", 0.16, -0.15);
+      break;
+    }
+    case "explotar": { // EUFORIA — EXPLODE: expandir y contraer a la vez, caótico
+      const s1 = Math.sin(px * 0.05 + t * 0.021);
+      const s2 = Math.cos(py * 0.045 - t * 0.017);
+      dx += nx * s1 * g * 0.5 + s2 * g * 0.32;
+      dy += ny * s2 * g * 0.5 + s1 * g * 0.32;
+      dx += (Math.random() - 0.5) * W * 0.055 * (g / (W * 0.16));
+      dy += (Math.random() - 0.5) * W * 0.055 * (g / (W * 0.16));
+      // al borde de perder la identidad, pero sin cruzarlo: se limita el total
+      const lim = W * 0.5;
+      const dd = Math.hypot(dx, dy);
+      if (dd > lim) { dx *= lim / dd; dy *= lim / dd; }
+      break;
+    }
+  }
+  return { dx, dy };
+}
+
+function aplicarLicuar() {
+  const pts = landmarksRostro;
+  if (pts.length < 400) return;
+
+  // --- crossfade entre emociones (interpolación de estados, 300-800 ms
+  //     ajustable con el slider de velocidad). Nunca se acumula: cada frame
+  //     se recalcula desde cero.
+  const ahora = performance.now();
+  const dt = licuar.ultimoFrame ? Math.min(120, ahora - licuar.ultimoFrame) : 16;
+  licuar.ultimoFrame = ahora;
+
+  const emoObjetivo = estado.emocion || EMOCION_CALMA;
+  if (emoObjetivo !== licuar.emoActual) {
+    licuar.emoAnterior = licuar.emoActual;
+    licuar.emoActual = emoObjetivo;
+    licuar.mezcla = 0;
+  }
+  const transMs = Math.max(90, licuar.transicionMs * (licuar.emoActual.velMul || 1));
+  licuar.mezcla = Math.min(1, licuar.mezcla + dt / transMs);
+  const m = licuar.mezcla * licuar.mezcla * (3 - 2 * licuar.mezcla); // smoothstep
+  const transicionando = m < 1 && licuar.emoAnterior !== licuar.emoActual;
+
+  // bounding box de la cara + margen
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const p of pts) {
+    if (p.x < minX) minX = p.x;
+    if (p.y < minY) minY = p.y;
+    if (p.x > maxX) maxX = p.x;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const anchoCara = maxX - minX, altoCara = maxY - minY;
+  if (anchoCara < 20 || altoCara < 20) return;
+
+  const mgX = anchoCara * 0.30, mgY = altoCara * 0.42;
+  const bx = Math.max(0, Math.floor(minX - mgX));
+  const by = Math.max(0, Math.floor(minY - mgY));
+  const bw = Math.min(canvas.width - bx, Math.ceil(anchoCara + mgX * 2));
+  const bh = Math.min(canvas.height - by, Math.ceil(altoCara + mgY * 2));
+  if (bw < 8 || bh < 8) return;
+
+  // textura: copia limpia de la región (el frame ya está dibujado, sin glitch)
+  texLicuar.width = bw;
+  texLicuar.height = bh;
+  try {
+    texLicuarCtx.clearRect(0, 0, bw, bh);
+    texLicuarCtx.drawImage(canvas, bx, by, bw, bh, 0, 0, bw, bh);
+  } catch (err) {
+    return; // CORS con video de otro origen
+  }
+
+  // Zonas del rostro (centroides) desde la geometría original.
+  const z = {};
+  for (const nombre in ZONAS_IDX) z[nombre] = centroideRasgo(pts, ZONAS_IDX[nombre]);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+
+  // HSV -> parámetros: saturación = intensidad, brillo = radio/escala.
+  const sat = estado.emoSat != null ? estado.emoSat : 0.6;
+  const brillo = estado.emoBrillo != null ? estado.emoBrillo : 1;
+  const magnitud = GANANCIA_MAGNITUD[licuar.nivelMagnitud - 1] || 1;
+  const dial = 0.55 + 0.45 * estado.amplitud; // el potenciómetro queda como trim
+  const gain = magnitud * (0.35 + 0.65 * Math.max(0.2, sat)) * dial;
+  const radio = 0.65 + brillo * 0.85;                    // warpRadius
+  const g = anchoCara * 0.16 * gain;                     // px base de desplazamiento
+  const maxDisp = anchoCara * (0.30 + 0.14 * licuar.nivelMagnitud); // tope por vértice
+
+  const pulso = ahora < estado.glitchHasta
+    ? (estado.glitchHasta - ahora) / CONFIG.duracionGlitch
+    : 0;
+
+  const N = CONFIG.licuarGrilla;
+  const src = [], dst = [];
+  const wctx = { cx, cy, W: anchoCara, H: altoCara, z, t: ahora, g, radio, u: 0, v: 0 };
+
+  for (let gy = 0; gy <= N; gy++) {
+    for (let gx = 0; gx <= N; gx++) {
+      const u = gx / N, v = gy / N;
+      const px = bx + u * bw, py = by + v * bh;
+      src.push({ x: px, y: py });
+
+      let dx = 0, dy = 0;
+      const borde = gx === 0 || gy === 0 || gx === N || gy === N;
+
+      if (!borde && gain > 0.02) {
+        wctx.u = u; wctx.v = v;
+        const wA = warpVertice(licuar.emoActual, px, py, wctx);
+        if (transicionando) {
+          const wP = warpVertice(licuar.emoAnterior, px, py, wctx);
+          dx = wP.dx + (wA.dx - wP.dx) * m;
+          dy = wP.dy + (wA.dy - wP.dy) * m;
+        } else {
+          dx = wA.dx; dy = wA.dy;
+        }
+
+        // "direction": el vector de inclinación empuja el conjunto (modifier)
+        const attn = Math.max(0, 1 - Math.hypot(px - cx, py - cy) / (anchoCara * 0.95));
+        dx += estado.glitchDirX * g * 0.5 * estado.glitchMag * attn;
+        dy += estado.glitchDirY * g * 0.5 * estado.glitchMag * attn;
+
+        // pulso por cambio brusco (breve inflado global)
+        if (pulso > 0) {
+          const dC = Math.hypot(px - cx, py - cy), Rp = anchoCara * 0.75;
+          if (dC < Rp) {
+            const fp = 1 - dC / Rp;
+            dx += ((px - cx) / (dC || 1)) * fp * pulso * g * 1.2;
+            dy += ((py - cy) / (dC || 1)) * fp * pulso * g * 1.2;
+          }
+        }
+
+        // tope por vértice: evita basura y mantiene el rostro reconocible
+        const dd = Math.hypot(dx, dy);
+        if (dd > maxDisp) { dx *= maxDisp / dd; dy *= maxDisp / dd; }
+      }
+
+      dst.push({ x: px + dx, y: py + dy });
+    }
+  }
+
+  for (let gy = 0; gy < N; gy++) {
+    for (let gx = 0; gx < N; gx++) {
+      const i00 = gy * (N + 1) + gx;
+      const i10 = i00 + 1;
+      const i01 = i00 + (N + 1);
+      const i11 = i01 + 1;
+      dibujarTrianguloLicuar(src[i00], src[i10], src[i11], dst[i00], dst[i10], dst[i11], bx, by);
+      dibujarTrianguloLicuar(src[i00], src[i11], src[i01], dst[i00], dst[i11], dst[i01], bx, by);
+    }
+  }
 }
 
 /* ---------------------------------------------------------- */
@@ -648,6 +1166,11 @@ function procesarMensaje(mensaje) {
   estado.inclinacionX = inclinacionX;
   estado.colorHex = colorHex;
   estado.colorDominante = colorDominante;
+  // color -> HSV -> emoción + intensidad (sat) + radio (brillo) del licuado
+  const clasi = clasificarEmocion(colorHex);
+  estado.emocion = clasi.emocion;
+  estado.emoSat = clasi.sat;
+  estado.emoBrillo = clasi.brillo;
 
   // Vector de inclinación: se usa el rango COMPLETO del movimiento (los dos
   // ejes con signo), no solo la magnitud de un eje. La magnitud del vector
@@ -681,11 +1204,14 @@ function procesarMensaje(mensaje) {
     regla = `inclinación (${rumbo}) × control → ruido (${controlValor.toFixed(0)}%)`;
   }
   if (colorHex) regla += ` · filtro ${colorDominante}`;
+  if (licuarActivo && estado.emocion) {
+    regla += ` · licuado: ${estado.emocion.etiqueta.toLowerCase()}`;
+  }
 
   actualizarVisualizacionBlob(inclinacion, cambioBrusco, controlValor, colorHex);
   actualizarPanelEstado(intensidad, cambioBrusco || estado.glitchSostenido, regla, inclinacion, controlValor, colorHex, colorDominante);
   log(
-    `inc=(${inclinacionX.toFixed(0)},${inclinacion.toFixed(0)})° |${magVector.toFixed(0)}° ${rumbo}| brusco=${cambioBrusco ? "sí" : "no"} sostenido=${estado.glitchSostenido ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} → ${regla}`,
+    `inc=(${inclinacionX.toFixed(0)},${inclinacion.toFixed(0)})° |${magVector.toFixed(0)}° ${rumbo}| brusco=${cambioBrusco ? "sí" : "no"} control=${controlValor.toFixed(0)} color=${colorDominante} (${(estado.emocion || EMOCION_CALMA).etiqueta}) → ${regla}`,
     false,
     cambioBrusco
   );
@@ -729,11 +1255,19 @@ function etiquetaRumbo(ang, mag) {
 let demoInterval = null;
 
 // Colores de referencia (mismo formato que entrega el TCS34725 ya normalizado).
+// Se recorren en el demo para ejercitar todas las emociones del licuado
+// (ver EMOCIONES / DEFORMATION_RULES.md): rojo=ira, amarillo=alegría,
+// verde=asco, cian=sorpresa, azul=tristeza, violeta=miedo, magenta=euforia,
+// gris/casi blanco=calma.
 const COLORES_DEMO = [
-  { hex: "#B62821", dominante: "rojo" },
+  { hex: "#C62828", dominante: "rojo" },
+  { hex: "#E6C229", dominante: "amarillo" },
   { hex: "#2E9E5B", dominante: "verde" },
-  { hex: "#2B6FD9", dominante: "azul" },
-  { hex: "#9A9A96", dominante: "equilibrado" },
+  { hex: "#28B6C6", dominante: "cian" },
+  { hex: "#2B5FD9", dominante: "azul" },
+  { hex: "#7A3FD9", dominante: "violeta" },
+  { hex: "#C93FC0", dominante: "magenta" },
+  { hex: "#C9C9C4", dominante: "equilibrado" },
 ];
 
 function iniciarModoDemo() {
@@ -831,6 +1365,10 @@ function cerrarMenus(exceptoBoton) {
     btn.setAttribute("aria-expanded", "false");
     const panel = document.getElementById(btn.dataset.target);
     if (panel) panel.hidden = true;
+    // Respaldo del z-index para navegadores sin :has() (ver style.css):
+    // el .menu-item cerrado vuelve a su nivel normal.
+    const item = btn.closest(".menu-item");
+    if (item) item.style.zIndex = "";
   });
 }
 
@@ -853,6 +1391,8 @@ menuTriggers.forEach((btn) => {
     cerrarMenus(btn);
     btn.setAttribute("aria-expanded", String(!abierto));
     panel.hidden = abierto;
+    const item = btn.closest(".menu-item");
+    if (item) item.style.zIndex = abierto ? "" : "40";
     actualizarVisibilidadVentanaSenal();
   });
 });
@@ -1214,6 +1754,7 @@ function dibujarHudGrabacion() {
 
 function loop() {
   actualizarDeteccionFacial();
+  actualizarMallaFacial();
   dibujarFrameBase();
 
   // --- Eje Z del glitch: profundidad SIGNADA a partir del empuje del vector.
@@ -1234,12 +1775,17 @@ function loop() {
   estado.glitchDirX = Math.cos(angRad);
   estado.glitchDirY = Math.sin(angRad);
 
-  const glitchActivo = performance.now() < estado.glitchHasta || estado.glitchSostenido;
+  // Licuar rostro: opera sobre el frame LIMPIO (antes del glitch), usando la
+  // malla facial + el dial + el vector de inclinación (ver sección 02c).
+  if (licuarActivo) aplicarLicuar();
+
+  const glitchActivo = glitchHabilitado &&
+    (performance.now() < estado.glitchHasta || estado.glitchSostenido);
   if (glitchActivo) {
     aplicarFragmentacion();
     aplicarGlitchAvanzado();
   }
-  aplicarRuido(estado.intensidad);
+  if (glitchHabilitado) aplicarRuido(estado.intensidad);
   aplicarFiltroColor(estado.colorHex, estado.amplitud);
 
   const ovalo = ovaloActivo();
