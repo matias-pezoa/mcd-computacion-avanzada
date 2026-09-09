@@ -6,23 +6,11 @@
  */
 import { create } from 'zustand'
 import * as THREE from 'three'
-import type { Vec3 } from '../geometry/types'
-import { DEFAULT_PROFILE_PARAMS } from '../geometry/profile'
 import type { ProfileParams } from '../geometry/profile'
 import {
-  DEFAULT_SCALE_PARAMS,
-  type ScaleParams,
-  type ScalePresetId,
-} from '../geometry/scaleProfiles'
-import { DEFAULT_LOFT_OPTIONS } from '../geometry/loft'
-import type { LoftOptions } from '../geometry/loft'
-import {
-  DEFAULT_SURFACE_PARAMS,
-  type SurfaceId,
-  type SurfaceParams,
-} from '../geometry/surfaces'
-import { DEFAULT_SAMPLER_PARAMS } from '../geometry/sampler'
-import type { SamplerParams } from '../geometry/sampler'
+  DEFAULT_FEATHER_FIELD,
+  type FeatherFieldParams,
+} from '../geometry/featherField'
 import {
   createAttractor,
   type Attractor,
@@ -30,48 +18,31 @@ import {
   type FalloffType,
 } from '../geometry/attractionField'
 
-export type AppMode = 'loft' | 'field'
+export type AppMode = 'volume' | 'laser'
 
-const DEFAULT_SPINE: Vec3[] = [
-  [-6, 0, 0],
-  [-2, 3, 1.5],
-  [2, 3, -1.5],
-  [6, 0, 0],
-]
+/** Campos numericos de FeatherFieldParams editables desde la UI. */
+export type FieldNumericKey = Exclude<
+  keyof FeatherFieldParams,
+  'combine' | 'alignToField' | 'rib' | 'profile'
+>
 
 export interface AppState {
   mode: AppMode
 
-  // --- Fase 1: volumen parametrico ---
-  profile: ProfileParams
-  scalePreset: ScalePresetId
-  scale: ScaleParams
-  spine: Vec3[]
-  loft: LoftOptions
-
-  // --- Fase 2: mapas de atraccion ---
-  surfaceId: SurfaceId
-  surface: SurfaceParams
+  // --- Modo Volumen: campo de plumas desde un plano ---
+  field: FeatherFieldParams
   attractors: Attractor[]
   selectedAttractorId: string | null
-  sampler: SamplerParams
-  combine: CombineMode
 
   // acciones
   setMode: (m: AppMode) => void
+  setFieldParam: (key: FieldNumericKey, value: number) => void
   setProfileParam: (key: keyof ProfileParams, value: number) => void
-  setScalePreset: (id: ScalePresetId) => void
-  setScaleParam: (key: keyof ScaleParams, value: number) => void
-  setLoftOption: <K extends keyof LoftOptions>(key: K, value: LoftOptions[K]) => void
-  setSpinePoint: (index: number, value: Vec3) => void
-  addSpinePoint: () => void
-  removeSpinePoint: (index: number) => void
-
-  setSurfaceId: (id: SurfaceId) => void
-  setSurfaceParam: (key: keyof SurfaceParams, value: number) => void
-  setSamplerParam: (key: keyof SamplerParams, value: number) => void
   setCombine: (mode: CombineMode) => void
-  addAttractor: (position: Vec3) => void
+  toggleAlignToField: () => void
+  toggleRib: () => void
+
+  addAttractor: (position: [number, number, number]) => void
   updateAttractor: (id: string, patch: Partial<Omit<Attractor, 'id'>>) => void
   removeAttractor: (id: string) => void
   selectAttractor: (id: string | null) => void
@@ -81,80 +52,37 @@ export interface AppState {
 
 function initialAttractors(): Attractor[] {
   return [
-    createAttractor(new THREE.Vector3(0, 5, 6), {
-      radius: 7,
-      strength: 1,
-      falloff: 'gaussian',
-    }),
-    createAttractor(new THREE.Vector3(0, -4, -5), {
-      radius: 5,
-      strength: 0.7,
-      falloff: 'linear',
-    }),
+    createAttractor(new THREE.Vector3(0, 5, 2), { radius: 12, strength: 1, falloff: 'gaussian' }),
+    createAttractor(new THREE.Vector3(-9, 3, -7), { radius: 8, strength: 0.65, falloff: 'linear' }),
   ]
 }
 
-const INITIAL = {
-  mode: 'loft' as AppMode,
-  profile: { ...DEFAULT_PROFILE_PARAMS },
-  scalePreset: 'bell' as ScalePresetId,
-  scale: { ...DEFAULT_SCALE_PARAMS },
-  spine: DEFAULT_SPINE.map((p) => [...p] as Vec3),
-  loft: { ...DEFAULT_LOFT_OPTIONS },
-  surfaceId: 'deformedCylinder' as SurfaceId,
-  surface: { ...DEFAULT_SURFACE_PARAMS },
-  sampler: { ...DEFAULT_SAMPLER_PARAMS },
-  combine: 'max' as CombineMode,
+function initialField(): FeatherFieldParams {
+  return {
+    ...DEFAULT_FEATHER_FIELD,
+    profile: { ...DEFAULT_FEATHER_FIELD.profile },
+  }
 }
 
 export const useAppStore = create<AppState>((set) => ({
-  ...INITIAL,
+  mode: 'volume',
+  field: initialField(),
   attractors: initialAttractors(),
   selectedAttractorId: null,
 
   setMode: (mode) => set({ mode }),
 
+  setFieldParam: (key, value) => set((s) => ({ field: { ...s.field, [key]: value } })),
+
   setProfileParam: (key, value) =>
-    set((s) => ({ profile: { ...s.profile, [key]: value } })),
+    set((s) => ({ field: { ...s.field, profile: { ...s.field.profile, [key]: value } } })),
 
-  setScalePreset: (scalePreset) => set({ scalePreset }),
+  setCombine: (combine) => set((s) => ({ field: { ...s.field, combine } })),
 
-  setScaleParam: (key, value) => set((s) => ({ scale: { ...s.scale, [key]: value } })),
+  toggleAlignToField: () =>
+    set((s) => ({ field: { ...s.field, alignToField: !s.field.alignToField } })),
 
-  setLoftOption: (key, value) => set((s) => ({ loft: { ...s.loft, [key]: value } })),
-
-  setSpinePoint: (index, value) =>
-    set((s) => {
-      const spine = s.spine.slice()
-      spine[index] = value
-      return { spine }
-    }),
-
-  addSpinePoint: () =>
-    set((s) => {
-      const spine = s.spine.slice()
-      const last = spine[spine.length - 1]
-      const prev = spine[spine.length - 2] ?? [last[0] - 4, last[1], last[2]]
-      spine.push([
-        last[0] + (last[0] - prev[0]),
-        last[1] + (last[1] - prev[1]),
-        last[2] + (last[2] - prev[2]),
-      ])
-      return { spine }
-    }),
-
-  removeSpinePoint: (index) =>
-    set((s) => {
-      if (s.spine.length <= 2) return s
-      return { spine: s.spine.filter((_, i) => i !== index) }
-    }),
-
-  setSurfaceId: (surfaceId) => set({ surfaceId }),
-  setSurfaceParam: (key, value) =>
-    set((s) => ({ surface: { ...s.surface, [key]: value } })),
-  setSamplerParam: (key, value) =>
-    set((s) => ({ sampler: { ...s.sampler, [key]: value } })),
-  setCombine: (combine) => set({ combine }),
+  toggleRib: () => set((s) => ({ field: { ...s.field, rib: !s.field.rib } })),
 
   addAttractor: (position) =>
     set((s) => {
@@ -177,8 +105,8 @@ export const useAppStore = create<AppState>((set) => ({
 
   reset: () =>
     set({
-      ...INITIAL,
-      spine: DEFAULT_SPINE.map((p) => [...p] as Vec3),
+      mode: 'volume',
+      field: initialField(),
       attractors: initialAttractors(),
       selectedAttractorId: null,
     }),

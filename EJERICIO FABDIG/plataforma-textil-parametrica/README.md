@@ -9,16 +9,13 @@ para la vision completa, el stack y el estado por fases.
 
 ## Estado
 
-| Fase | Que | Estado |
+| Modo | Que | Estado |
 |---|---|---|
-| 0 | Setup + viewport 3D | ✅ |
-| 1 | Motor de volumen parametrico (perfil 2D + curva guia + escalado, export STL) | ✅ |
-| 2 | Mapas de atraccion + instanciado dirigido por campo | ✅ |
-| 3 | Geometria auxetica | pendiente |
-| 4 | Imagen → vector / dato | pendiente |
-| 5 | Kerf + exportacion laser | pendiente |
-| 6 | Integracion | pendiente |
-| 7 | Pulido | pendiente |
+| Volumen (3D) | Plumas que emergen de un plano, dirigidas por un mapa de atractores. Export STL. | ✅ |
+| Corte laser (2D) | Cortes parametricos solo-vector (huella de plumas, auxetico, escamas). Export SVG/DXF. | pendiente |
+
+Roadmap posterior: imagen → vector / campo, kerf por material, importar maniqui.
+Ver `docs/guia-fases.md`.
 
 ## Requisitos
 
@@ -31,26 +28,29 @@ para la vision completa, el stack y el estado por fases.
 npm install
 npm run dev        # http://localhost:5173
 npm test           # tests unitarios de src/geometry/
-npm run build      # genera dist/ (estatico)
+npm run build      # compila a ../../plataforma-parametrica/ (ver Deploy)
 npm run lint       # oxlint
 npm run format     # prettier
 ```
 
-### Fase 1 — Volumen
+### Modo Volumen (3D)
 
-Pestana **1 · Volumen**. Un perfil 2D (seccion de "pluma") se barre a lo largo
-de una curva guia editable, con un perfil de escalado (constante / lineal /
-campana). Clic en un punto de control del viewport para seleccionarlo y
-arrastrar los ejes. "Descargar STL (mm)" exporta la malla convertida a
-milimetros.
+Todo emerge de un plano (la base de tela). Sobre el se siembran elementos tipo
+pluma (perfil 2D + nervadura) que crecen y se arquean hacia arriba; la **altura,
+el ancho, la curvatura, la orientacion y la densidad** salen del **mapa de
+atractores**, no de edicion manual.
 
-### Fase 2 — Atractores
+- Clic en el plano agrega un atractor; clic en una esfera roja la selecciona y
+  permite arrastrarla (su altura tambien influye).
+- El panel ajusta la base y distribucion, la forma de la pluma, el perfil 2D de
+  la seccion y cada atractor (radio, intensidad, tipo de caida).
+- "Descargar STL (mm)" exporta **todas las plumas fusionadas** en un unico
+  archivo, convertido a milimetros.
 
-Pestana **2 · Atractores**. Sobre una superficie de prueba (cilindro tipo torso
-o esfera) se distribuyen instancias con densidad, escala y orientacion
-controladas por atractores. Clic en la superficie agrega un atractor; clic en
-una esfera roja lo selecciona y permite arrastrarlo; el panel ajusta radio,
-intensidad y tipo de caida.
+### Modo Corte laser (2D) — en preparacion
+
+Trabajara solo desde el vector: cortes parametricos con distintas familias de
+geometria y export SVG/DXF con compensacion de kerf.
 
 ## Deploy a GitHub Pages
 

@@ -1,56 +1,71 @@
 /**
- * Escena de la Fase 2: superficie de prueba + instancias dirigidas por el
- * campo de atraccion + gizmos de atractores editables en el viewport.
+ * Escena del modo Volumen: base de tela (plano) + campo de plumas que emergen
+ * de ella + gizmos de atractores editables en el viewport.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { TransformControls } from '@react-three/drei'
 import type { ThreeEvent } from '@react-three/fiber'
 import { useAppStore } from '../state/store'
-import { instanceMatrix, type SurfaceInstance } from '../geometry/sampler'
 import type { Attractor } from '../geometry/attractionField'
 
-interface FieldSceneProps {
-  surfaceGeometry: THREE.BufferGeometry
-  instances: SurfaceInstance[]
+interface FeatherFieldSceneProps {
+  blades: THREE.BufferGeometry
+  ribs: THREE.BufferGeometry | null
+  planeSize: number
 }
 
-export function FieldScene({ surfaceGeometry, instances }: FieldSceneProps) {
+export function FeatherFieldScene({ blades, ribs, planeSize }: FeatherFieldSceneProps) {
   const attractors = useAppStore((s) => s.attractors)
   const selectedId = useAppStore((s) => s.selectedAttractorId)
   const addAttractor = useAppStore((s) => s.addAttractor)
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
 
-  // la surfaceGeometry la libera App (useDisposePrevious).
   const handleRefs = useRef<Record<string, THREE.Mesh | null>>({})
   const selected = attractors.find((a) => a.id === selectedId)
-  const selectedObject = selected
-    ? (handleRefs.current[selected.id] ?? undefined)
-    : undefined
+  const selectedObject = selected ? (handleRefs.current[selected.id] ?? undefined) : undefined
 
   return (
     <group>
+      {/* base de tela */}
       <mesh
-        geometry={surfaceGeometry}
+        rotation={[-Math.PI / 2, 0, 0]}
         receiveShadow
         onPointerDown={(e: ThreeEvent<PointerEvent>) => {
           if (e.button !== 0) return
           e.stopPropagation()
-          addAttractor([e.point.x, e.point.y, e.point.z])
+          // click sobre el plano -> atractor un poco por encima
+          addAttractor([e.point.x, 3, e.point.z])
         }}
       >
-        <meshStandardMaterial
-          color="#c9a98f"
-          roughness={0.9}
-          metalness={0}
-          transparent
-          opacity={0.55}
-          side={THREE.DoubleSide}
-        />
+        <planeGeometry args={[planeSize, planeSize, 1, 1]} />
+        <meshStandardMaterial color="#d8cdbf" roughness={0.95} metalness={0} />
       </mesh>
+      <gridHelper
+        args={[planeSize, Math.max(2, Math.round(planeSize / 2)), '#b9ab97', '#c7bca6']}
+        position={[0, 0.002, 0]}
+      />
 
-      <InstancedField instances={instances} />
+      {hasVerts(blades) && (
+        <mesh geometry={blades} castShadow>
+          <meshStandardMaterial
+            color="#f1ece0"
+            roughness={0.4}
+            metalness={0}
+            side={THREE.DoubleSide}
+            transparent
+            opacity={0.72}
+            depthWrite={false}
+          />
+        </mesh>
+      )}
+
+      {ribs && hasVerts(ribs) && (
+        <mesh geometry={ribs} castShadow>
+          <meshStandardMaterial color="#8a8158" roughness={0.5} metalness={0.05} />
+        </mesh>
+      )}
 
       {attractors.map((a) => (
         <AttractorGizmo
@@ -83,44 +98,9 @@ export function FieldScene({ surfaceGeometry, instances }: FieldSceneProps) {
   )
 }
 
-function InstancedField({ instances }: { instances: SurfaceInstance[] }) {
-  const ref = useRef<THREE.InstancedMesh>(null)
-  const geometry = useMemo(() => {
-    const g = new THREE.ConeGeometry(0.16, 0.95, 6)
-    g.translate(0, 0.47, 0) // base apoyada sobre la superficie
-    return g
-  }, [])
-  useEffect(() => () => geometry.dispose(), [geometry])
-
-  useEffect(() => {
-    const mesh = ref.current
-    if (!mesh) return
-    const m = new THREE.Matrix4()
-    const color = new THREE.Color()
-    for (let i = 0; i < instances.length; i++) {
-      instanceMatrix(instances[i], m)
-      mesh.setMatrixAt(i, m)
-      const f = instances[i].fieldValue
-      color.setHSL(0.09 + 0.02 * f, 0.35 + 0.4 * f, 0.32 + 0.4 * f)
-      mesh.setColorAt(i, color)
-    }
-    mesh.count = instances.length
-    mesh.instanceMatrix.needsUpdate = true
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true
-    mesh.computeBoundingSphere()
-  }, [instances])
-
-  return (
-    <instancedMesh
-      key={instances.length}
-      ref={ref}
-      args={[geometry, undefined, Math.max(instances.length, 1)]}
-      castShadow
-      frustumCulled={false}
-    >
-      <meshStandardMaterial vertexColors roughness={0.5} metalness={0.05} />
-    </instancedMesh>
-  )
+function hasVerts(g: THREE.BufferGeometry): boolean {
+  const pos = g.getAttribute('position')
+  return !!pos && pos.count > 0
 }
 
 interface AttractorGizmoProps {
@@ -136,6 +116,14 @@ function AttractorGizmo({ attractor, selected, meshRef, onSelect }: AttractorGiz
     attractor.position.y,
     attractor.position.z,
   ]
+  // circulo de influencia proyectado sobre el plano (y = 0)
+  const ring = useMemo(() => {
+    const g = new THREE.RingGeometry(attractor.radius - 0.08, attractor.radius, 72)
+    g.rotateX(-Math.PI / 2)
+    return g
+  }, [attractor.radius])
+  useEffect(() => () => ring.dispose(), [ring])
+
   return (
     <group>
       <mesh
@@ -152,8 +140,7 @@ function AttractorGizmo({ attractor, selected, meshRef, onSelect }: AttractorGiz
           emissive={selected ? '#5b1220' : '#180608'}
         />
       </mesh>
-      <mesh position={pos} rotation={[Math.PI / 2, 0, 0]}>
-        <ringGeometry args={[attractor.radius - 0.06, attractor.radius, 64]} />
+      <mesh geometry={ring} position={[pos[0], 0.004, pos[2]]}>
         <meshBasicMaterial
           color={selected ? '#ffd166' : '#ff5d73'}
           transparent

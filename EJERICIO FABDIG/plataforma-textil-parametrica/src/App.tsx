@@ -1,30 +1,24 @@
 /**
  * Layout raiz: barra lateral de parametros + viewport 3D.
  * La geometria se deriva del estado con funciones puras y se memoiza aca (una
- * sola vez), para compartirla entre el panel (stats, export) y la escena.
+ * sola vez), compartida entre el panel (stats, export) y la escena.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import './App.css'
 import { Viewport } from './scene/Viewport'
-import { LoftScene } from './components/LoftScene'
-import { FieldScene } from './components/FieldScene'
-import { LoftPanel } from './components/LoftPanel'
-import { FieldPanel } from './components/FieldPanel'
+import { FeatherFieldScene } from './components/FeatherFieldScene'
+import { FeatherFieldPanel } from './components/FeatherFieldPanel'
 import { useAppStore } from './state/store'
-import { buildProfile } from './geometry/profile'
-import { loftProfile } from './geometry/loft'
-import { makeScaleFn } from './geometry/scaleProfiles'
-import { createSurface, surfaceToGeometry } from './geometry/surfaces'
-import { sampleSurface } from './geometry/sampler'
+import { buildFeatherField } from './geometry/featherField'
 
 export default function App() {
   const mode = useAppStore((s) => s.mode)
   const setMode = useAppStore((s) => s.setMode)
   const reset = useAppStore((s) => s.reset)
+  const planeSize = useAppStore((s) => s.field.planeSize)
 
-  const loft = useLoft()
-  const field = useField()
+  const feather = useFeatherField()
 
   return (
     <div className="app">
@@ -35,17 +29,17 @@ export default function App() {
           <div className="seg mode">
             <button
               type="button"
-              className={mode === 'loft' ? 'active' : ''}
-              onClick={() => setMode('loft')}
+              className={mode === 'volume' ? 'active' : ''}
+              onClick={() => setMode('volume')}
             >
-              1 · Volumen
+              Volumen (3D)
             </button>
             <button
               type="button"
-              className={mode === 'field' ? 'active' : ''}
-              onClick={() => setMode('field')}
+              className={mode === 'laser' ? 'active' : ''}
+              onClick={() => setMode('laser')}
             >
-              2 · Atractores
+              Corte laser
             </button>
           </div>
           <button type="button" className="ghost" onClick={reset}>
@@ -53,88 +47,55 @@ export default function App() {
           </button>
         </header>
 
-        {mode === 'loft' ? (
-          <LoftPanel loft={loft.result} />
+        {mode === 'volume' ? (
+          <FeatherFieldPanel result={feather} />
         ) : (
-          <FieldPanel instanceCount={field.instances.length} />
+          <div className="panel">
+            <section>
+              <h3>Corte laser — proxima entrega</h3>
+              <p className="hint">
+                Este modo trabajara solo desde el vector: cortes parametricos con
+                distintas familias de geometria (huella de las plumas, retícula
+                auxetica, escamas) y export SVG/DXF.
+              </p>
+            </section>
+          </div>
         )}
       </aside>
 
       <main className="viewport">
         <Viewport>
-          {mode === 'loft' ? (
-            <LoftScene geometry={loft.result.geometry} curve={loft.curve} />
-          ) : (
-            <FieldScene
-              surfaceGeometry={field.surfaceGeometry}
-              instances={field.instances}
-            />
+          {mode === 'volume' && (
+            <FeatherFieldScene blades={feather.blades} ribs={feather.ribs} planeSize={planeSize} />
           )}
         </Viewport>
         <p className="note">
-          {mode === 'loft'
-            ? 'Perfil 2D barrido a lo largo de la curva guia con escalado variable. 1 u = 1 cm.'
-            : 'Instancias sobre la superficie con densidad, escala y orientacion segun el campo.'}
+          {mode === 'volume'
+            ? 'Plumas que emergen del plano (base de tela). Altura, ancho, curvatura y densidad segun el mapa de atractores. 1 u = 1 cm.'
+            : 'Modo de corte laser en preparacion.'}
         </p>
       </main>
     </div>
   )
 }
 
-function useLoft() {
-  const profile = useAppStore((s) => s.profile)
-  const spine = useAppStore((s) => s.spine)
-  const scalePreset = useAppStore((s) => s.scalePreset)
-  const scale = useAppStore((s) => s.scale)
-  const loftOpts = useAppStore((s) => s.loft)
+function useFeatherField() {
+  const field = useAppStore((s) => s.field)
+  const attractors = useAppStore((s) => s.attractors)
 
-  const curve = useMemo(
-    () =>
-      new THREE.CatmullRomCurve3(
-        spine.map((p) => new THREE.Vector3(p[0], p[1], p[2])),
-        false,
-        'catmullrom',
-        0.5,
-      ),
-    [spine],
-  )
+  const result = useMemo(() => buildFeatherField(attractors, field), [attractors, field])
 
-  const result = useMemo(() => {
-    const prof = buildProfile(profile)
-    const scaleFn = makeScaleFn(scalePreset, scale)
-    return loftProfile(prof, curve, scaleFn, loftOpts)
-  }, [profile, curve, scalePreset, scale, loftOpts])
-
-  useDisposePrevious(result.geometry)
-  return { curve, result }
+  useDisposePrevious(result.blades)
+  useDisposePrevious(result.ribs)
+  return result
 }
 
 /** Libera la BufferGeometry anterior cuando el memo produce una nueva. */
-function useDisposePrevious(geometry: THREE.BufferGeometry) {
+function useDisposePrevious(geometry: THREE.BufferGeometry | null) {
   const prev = useRef<THREE.BufferGeometry | null>(null)
   useEffect(() => {
     if (prev.current && prev.current !== geometry) prev.current.dispose()
     prev.current = geometry
   }, [geometry])
   useEffect(() => () => prev.current?.dispose(), [])
-}
-
-function useField() {
-  const surfaceId = useAppStore((s) => s.surfaceId)
-  const surfaceParams = useAppStore((s) => s.surface)
-  const attractors = useAppStore((s) => s.attractors)
-  const sampler = useAppStore((s) => s.sampler)
-  const combine = useAppStore((s) => s.combine)
-
-  const surface = useMemo(
-    () => createSurface(surfaceId, surfaceParams),
-    [surfaceId, surfaceParams],
-  )
-  const surfaceGeometry = useMemo(() => surfaceToGeometry(surface), [surface])
-  useDisposePrevious(surfaceGeometry)
-  const instances = useMemo(
-    () => sampleSurface(surface, attractors, { ...sampler, combine }),
-    [surface, attractors, sampler, combine],
-  )
-  return { surfaceGeometry, instances }
 }

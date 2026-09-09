@@ -16,11 +16,23 @@ const COLLAPSE_EPS = 1e-4
 /** Area (en unidades de Three^2) por debajo de la cual un triangulo se descarta. */
 const DEGENERATE_AREA_EPS = 1e-10
 
+/**
+ * Como se orienta el perfil a lo largo de la curva.
+ * - `frenet`: marcos de Frenet (curvatura de la curva). Puede torcer en curvas
+ *   casi planas o rectas.
+ * - `reference`: se fija un eje "ancho" del perfil cercano al vector `up`
+ *   (proyectado perpendicular a la tangente). Estable, sin giros; ideal para
+ *   piezas planas que emergen de una superficie (plumas sobre tela).
+ */
+export type LoftFrame = { type: 'frenet' } | { type: 'reference'; up: THREE.Vector3 }
+
 export interface LoftOptions {
   /** Numero de secciones a lo largo de la curva (>= 2). */
   sections: number
   /** Cerrar los extremos con tapas (si la seccion no esta colapsada). */
   caps: boolean
+  /** Orientacion del perfil. Por defecto Frenet. */
+  frame?: LoftFrame
 }
 
 export const DEFAULT_LOFT_OPTIONS: LoftOptions = { sections: 96, caps: true }
@@ -55,9 +67,9 @@ export function loftProfile(
   const sections = Math.max(2, Math.round(options.sections))
   const segments = sections - 1
 
-  const frames = curve.computeFrenetFrames(segments, false)
   const points: THREE.Vector3[] = []
   for (let i = 0; i <= segments; i++) points.push(curve.getPoint(i / segments))
+  const axes = buildAxes(curve, segments, options.frame ?? { type: 'frenet' })
 
   const rings: THREE.Vector3[][] = []
   const collapsedSections: number[] = []
@@ -71,8 +83,8 @@ export function loftProfile(
     if (collapsed) collapsedSections.push(i)
 
     const origin = points[i]
-    const normal = frames.normals[i]
-    const binormal = frames.binormals[i]
+    const axisX = axes[i].x // eje del ancho del perfil (profile.x)
+    const axisY = axes[i].y // eje del espesor del perfil (profile.y)
     const ring: THREE.Vector3[] = []
     for (let j = 0; j < M; j++) {
       if (collapsed) {
@@ -81,8 +93,8 @@ export function loftProfile(
       }
       const [px, py] = profile[j]
       const v = origin.clone()
-      v.addScaledVector(normal, px * s)
-      v.addScaledVector(binormal, py * s)
+      v.addScaledVector(axisX, px * s)
+      v.addScaledVector(axisY, py * s)
       ring.push(v)
     }
     rings.push(ring)
@@ -170,6 +182,35 @@ export function loftProfile(
     sectionCount: segments + 1,
     profilePointCount: M,
   }
+}
+
+/** Pares de ejes (ancho, espesor) del perfil por seccion. */
+function buildAxes(
+  curve: THREE.Curve<THREE.Vector3>,
+  segments: number,
+  frame: LoftFrame,
+): { x: THREE.Vector3; y: THREE.Vector3 }[] {
+  const axes: { x: THREE.Vector3; y: THREE.Vector3 }[] = []
+  if (frame.type === 'frenet') {
+    const frames = curve.computeFrenetFrames(segments, false)
+    for (let i = 0; i <= segments; i++) {
+      axes.push({ x: frames.normals[i], y: frames.binormals[i] })
+    }
+    return axes
+  }
+  const up = frame.up.clone().normalize()
+  for (let i = 0; i <= segments; i++) {
+    const t = curve.getTangent(i / segments).normalize()
+    const x = up.clone().addScaledVector(t, -up.dot(t))
+    if (x.lengthSq() < 1e-8) {
+      x.set(1, 0, 0).addScaledVector(t, -t.x)
+      if (x.lengthSq() < 1e-8) x.set(0, 0, 1).addScaledVector(t, -t.z)
+    }
+    x.normalize()
+    const y = new THREE.Vector3().crossVectors(t, x).normalize()
+    axes.push({ x, y })
+  }
+  return axes
 }
 
 /** Area del triangulo (a,b,c) leyendo el array plano de posiciones. */

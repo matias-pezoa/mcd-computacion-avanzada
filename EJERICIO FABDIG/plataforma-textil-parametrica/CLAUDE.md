@@ -1,21 +1,22 @@
 # Proyecto: Plataforma de Modelado Parametrico Textil (impresion 3D + corte laser)
 
 ## Vision
-Herramienta web para diseno de moda experimental que permite:
-1. Modelar volumenes parametricos (perfil 2D + curva guia + escalado) pensados para
-   impresion 3D sobre textil.
-2. Generar patrones de corte laser en 2D, incluyendo geometrias auxeticas
-   (re-entrantes, cuadrados rotantes, quirales) que permiten que una lamina plana
-   se adapte a una superficie corporal curva.
-3. Distribuir elementos (escamas, plumas, celdas) sobre una superficie 3D usando
-   mapas de atraccion: campos escalares/vectoriales que controlan densidad, escala
-   y rotacion de forma continua y no uniforme, siguiendo lineas anatomicas.
-4. Extraer datos de imagenes de referencia (contornos vectorizables, mapas de
-   luminancia usables como campos de atraccion).
-5. Compensar el ancho de corte (kerf) segun material antes de exportar.
-6. Exportar: STL/OBJ/glTF para impresion 3D, SVG/DXF para corte laser.
+Herramienta web para diseno de moda experimental. Dos modos, dos fabricaciones:
 
-Referencia estetica: Iris van Herpen y diseno computacional de moda.
+1. **Volumen (3D):** TODO emerge de un plano 2D (la base de tela). Sobre ese plano
+   se siembran elementos tipo pluma (perfil 2D + nervadura) que crecen y se
+   arquean hacia arriba; altura, ancho, curvatura, orientacion y densidad salen
+   de un mapa de atractores. Se exporta un unico STL para imprimir en 3D sobre
+   la tela. NO hay edicion de curvas 3D a mano: la forma es 100% parametrica.
+2. **Corte laser (2D):** se trabaja SOLO desde el vector. Cortes parametricos con
+   distintas familias de geometria (huella de las plumas, retícula auxetica,
+   escamas), export SVG/DXF con compensacion de kerf. (En preparacion.)
+
+Ademas (roadmap): extraer datos de imagenes de referencia (contornos, luminancia
+como campo de atraccion) y libreria de materiales para el kerf.
+
+Referencia estetica: Iris van Herpen — piezas rigidas translucidas que se
+despliegan desde una base de malla/tul siguiendo la anatomia, densidad variable.
 
 ## Stack tecnico (decision tomada, no reevaluar sin discutirlo)
 - React + Vite + TypeScript estricto
@@ -49,11 +50,15 @@ Se agregan en la fase que las necesita, no antes:
 ## Estructura de carpetas
 ```
 src/
-  geometry/       # funciones puras: profile, scaleProfiles, loft, surfaces,
-                  #   attractionField, sampler  (+ __tests__/)
-  components/     # componentes React (escenas y paneles)
-  scene/          # setup de R3F (Viewport: canvas, luces, grid, OrbitControls)
-  io/             # exportadores (exportSTL) e importadores
+  geometry/       # funciones puras (+ __tests__/):
+                  #   profile        perfil 2D de la seccion
+                  #   loft           barrido perfil->malla (marco Frenet | reference)
+                  #   quill          espina procedural de una pluma desde el plano
+                  #   attractionField atractores + sampleField
+                  #   featherField   plano + atractores -> campo de plumas fusionado
+  components/     # FeatherFieldScene, FeatherFieldPanel, ParamSlider
+  scene/          # Viewport (canvas R3F, luces, grid, OrbitControls)
+  io/             # exportSTL
   state/          # store de zustand
   utils/          # units, params, random
 ```
@@ -68,49 +73,52 @@ src/
 
 ## Estado del proyecto
 
-- Fase actual: 3 (geometria auxetica) — pendiente
-- Ultima fase completada: 2
+- Modo Volumen: COMPLETO (campo de plumas desde el plano, dirigido por atractores).
+- Modo Corte laser: PENDIENTE (solo un placeholder en la UI).
 
-### Fase 0 (setup) — COMPLETA
-- Proyecto Vite React-TS, estructura de carpetas, tsconfig estricto, prettier.
-- `src/utils/units.ts` (Three<->mm), `src/utils/params.ts`, `src/utils/random.ts`.
-- `src/scene/Viewport.tsx`: canvas R3F con luces, grid infinito, OrbitControls.
+### Setup — COMPLETO
+- Vite React-TS, estructura de carpetas, tsconfig estricto, prettier, vitest.
+- `utils/units.ts` (Three<->mm, 1u=1cm), `utils/params.ts`, `utils/random.ts`.
+- `scene/Viewport.tsx`: canvas R3F con luces, grid infinito, OrbitControls.
 
-### Fase 1 (volumen parametrico) — COMPLETA
-- `src/geometry/profile.ts`: perfil 2D parametrico (ancho/alto en mm, dientes),
-  salida en unidades Three, CCW, cerrado. Helpers `signedArea`, `profileBounds`.
-- `src/geometry/scaleProfiles.ts`: presets de escalado constante / lineal / campana.
-- `src/geometry/loft.ts`: `loftProfile(profile, curve, scaleFn, options)` barre el
-  perfil por una `THREE.Curve` usando marcos de Frenet; colapsa secciones con
-  escala ~0 y descarta triangulos degenerados; tapas opcionales. Devuelve
-  BufferGeometry + rings + stats.
-- `src/io/exportSTL.ts`: `downloadStl` / `geometryToStlBlob` (escala a mm).
-- UI: `LoftScene` (malla + edicion de la curva guia con TransformControls) y
-  `LoftPanel` (perfil, escalado, malla, export, stats).
-- Tests: `profile.test.ts`, `loft.test.ts` (seccion uniforme, campana, colapso
-  sin degenerados, malla valida).
+### Modo Volumen — COMPLETO
+Reemplaza el enfoque anterior (curva-guia 3D editable + instanciado sobre
+superficie). Ahora TODO emerge de un plano.
 
-### Fase 2 (mapas de atraccion) — COMPLETA
-- `src/geometry/attractionField.ts`: `Attractor` (posicion, radio, strength,
-  falloff linear/inverseSquare/gaussian), `sampleField(point, attractors, combine)`
-  -> { value in [0,1], direction }. Combine 'max' | 'sum'.
-- `src/geometry/surfaces.ts`: superficies parametricas de prueba (esfera, cilindro
-  deformado tipo torso) con interfaz `ParametricSurface` + `surfaceToGeometry`.
-  (En Fase 6 se reemplaza por malla importada + three-mesh-bvh, misma interfaz.)
-- `src/geometry/sampler.ts`: `sampleSurface` — grilla UV filtrada
-  probabilisticamente por el campo; escala y orientacion (normal + gradiente
-  proyectado) por instancia; determinista por seed; tope `maxCount`.
-  `instanceMatrix` compone la matriz de cada instancia.
-- UI: `FieldScene` (superficie translucida, `InstancedMesh` con color por campo,
-  gizmos de atractores; clic en la superficie agrega, arrastre mueve el
-  seleccionado) y `FieldPanel` (superficie, lista de atractores, combine, sampler).
-- Tests: `attractionField.test.ts`, `sampler.test.ts` (determinismo, densidad vs
-  atractor, maxCount, ortonormalidad de ejes).
+- `geometry/profile.ts`: perfil 2D parametrico (ancho/alto mm, dientes), salida
+  en unidades Three, CCW, cerrado.
+- `geometry/loft.ts`: `loftProfile(profile, curve, scaleFn, options)`. `options.frame`
+  = `{type:'frenet'}` (default) o `{type:'reference', up}` (eje ancho fijo cercano
+  a `up`, sin giros — necesario para las plumas). Colapsa secciones con escala ~0,
+  descarta triangulos degenerados, tapas opcionales.
+- `geometry/quill.ts`: `buildQuillSpine(base, leanDir, params)` -> espina que sale
+  vertical del plano y se arquea hacia `leanDir` segun `curvature`. Devuelve la
+  curva + `crossAxis` (eje ancho horizontal para el marco reference del loft).
+- `geometry/attractionField.ts`: `Attractor` (pos, radio, strength, falloff
+  linear/inverseSquare/gaussian), `sampleField(point, attractors, combine)` ->
+  `{ value 0..1, direction }`. combine 'max' | 'sum'.
+- `geometry/featherField.ts`: `buildFeatherField(attractors, params)` — siembra
+  puntos en el plano por densidad del campo; en cada uno genera una pluma cuya
+  altura/ancho/curvatura salen del campo y que se arquea ALEJANDOSE del atractor;
+  fusiona todas las palas y (opcional) nervaduras en una malla. Determinista por
+  seed, tope `maxCount`. `mergeForExport(result)` fusiona palas+nervaduras para
+  un unico STL (bajo demanda, no en cada recalculo).
+- UI: `FeatherFieldScene` (base de tela + malla translucida + nervaduras + gizmos
+  de atractores; clic en el plano agrega atractor, arrastre lo mueve) y
+  `FeatherFieldPanel` (base/distribucion, forma de pluma, perfil, atractores,
+  export STL + stats).
+- Tests: `profile`, `loft` (incl. marco reference), `quill`, `attractionField`,
+  `featherField`. 28 casos.
 
 ### Pendiente / notas para retomar
-- El instanciado usa un placeholder (cono). Fase 6: usar la "pluma" real de Fase 1
-  como geometria instanciada.
-- Frenet frames pueden torcer en curvas casi planas; si molesta, cambiar loft a
-  rotation-minimizing frames (parallel transport).
-- Deploy a GitHub Pages: `npm run build` publica a `plataforma-parametrica/` en
-  la raiz del repo; commit + push a `main`. Ver README › Deploy.
+- **Modo Corte laser** (siguiente): 2D puro. Familias parametricas — empezar por
+  la huella vectorial del campo de plumas (contorno + linea de nervadura de cada
+  pluma proyectada al plano, para que el corte calce con la pieza 3D), luego
+  reticula auxetica y escamas. Render en canvas/SVG aparte del viewport 3D.
+  Export SVG (grupos por capa) y DXF. Kerf con Clipper2 mas adelante.
+- `material transmission` se cambio por `opacity` simple (mas predecible y sin
+  render target); si se quiere vidrio real, volver a `meshPhysicalMaterial`.
+- Los `default` de algunos `NumberParam` no coinciden 1:1 con
+  `DEFAULT_FEATHER_FIELD` (la fuente de verdad es la constante; el descriptor solo
+  alimenta tooltips). Alinear si se agrega "reset por slider".
+- Deploy: `npm run build` -> `../../plataforma-parametrica/`; commit + push a `main`.
