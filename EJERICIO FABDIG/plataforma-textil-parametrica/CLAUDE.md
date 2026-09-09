@@ -62,7 +62,9 @@ src/
 - `npm install`
 - `npm run dev` -> http://localhost:5173
 - `npm test` -> tests de geometry/
-- `npm run build` -> `dist/` estatico (base relativa, deployable a GitHub Pages)
+- `npm run build` -> genera el sitio en `../../plataforma-parametrica/` (raiz del
+  repo). Esa carpeta es lo que sirve GitHub Pages: commitearla a `main` + push.
+  URL: https://<usuario>.github.io/mcd-computacion-avanzada/plataforma-parametrica/
 
 ## Estado del proyecto
 
@@ -110,5 +112,5 @@ src/
   como geometria instanciada.
 - Frenet frames pueden torcer en curvas casi planas; si molesta, cambiar loft a
   rotation-minimizing frames (parallel transport).
-- Deploy a GitHub Pages: ver `.github/workflows/` y README. El repo padre ya
-  publica su propio sitio; este subproyecto se sirve con `base: './'`.
+- Deploy a GitHub Pages: `npm run build` publica a `plataforma-parametrica/` en
+  la raiz del repo; commit + push a `main`. Ver README › Deploy.

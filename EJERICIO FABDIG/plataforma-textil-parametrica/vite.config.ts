@@ -4,10 +4,16 @@ import { defineConfig } from 'vite'
 
 // https://vite.dev/config/
 export default defineConfig({
-  // base relativa: el build (dist/) funciona servido desde cualquier subruta,
-  // incluido un subdirectorio de GitHub Pages. Ver README para el deploy.
+  // base relativa: el build funciona servido desde cualquier subruta, incluido
+  // un subdirectorio de GitHub Pages.
   base: './',
   plugins: [react()],
+  build: {
+    // publica directo a la carpeta que sirve GitHub Pages del repo (raiz/main).
+    // Queda en https://<user>.github.io/mcd-computacion-avanzada/plataforma-parametrica/
+    outDir: '../../plataforma-parametrica',
+    emptyOutDir: true,
+  },
   test: {
     // los modulos de geometry/ son funciones puras: corren en node, sin DOM.
     environment: 'node',

@@ -54,15 +54,19 @@ intensidad y tipo de caida.
 
 ## Deploy a GitHub Pages
 
-El build usa `base: './'`, asi que `dist/` funciona servido desde cualquier
-subruta. Opciones:
+El Pages del repo sirve la rama `main` desde la raiz, sin build step. Este
+subproyecto se publica como carpeta estatica:
 
-1. **Workflow dedicado** (`.github/workflows/deploy-plataforma.yml`, incluido
-   pero desactivado por defecto): publica este subproyecto en Pages. Ojo: el
-   repo padre ya publica su sitio en la raiz; activar este workflow reemplaza
-   esa publicacion. Revisar antes de habilitarlo.
-2. **Subcarpeta estatica**: `npm run build` y commitear `dist/` a una ruta que
-   el sitio raiz enlace.
+- `npm run build` genera el sitio directamente en `../../plataforma-parametrica/`
+  (raiz del repo), con `base: './'` (rutas relativas).
+- Commitear esa carpeta a `main` y pushear. Queda en
+  `https://<usuario>.github.io/mcd-computacion-avanzada/plataforma-parametrica/`.
+- **Rebuild = re-`npm run build` + commit** de `plataforma-parametrica/`.
+
+Alternativa con GitHub Actions: `.github/workflows/deploy-plataforma.yml`
+(incluido, inerte). Habria que moverlo a la raiz del repo y cambiaria la fuente
+de Pages a "GitHub Actions", desplazando el sitio raiz actual. No recomendado
+mientras el repo publique su About desde la raiz.
 
 ## Estructura
 
