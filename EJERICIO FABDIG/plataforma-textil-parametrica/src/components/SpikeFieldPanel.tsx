@@ -32,6 +32,7 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
   const attractors = useAppStore((s) => s.attractors)
   const selectedId = useAppStore((s) => s.selectedAttractorId)
   const addAttractor = useAppStore((s) => s.addAttractor)
+  const addAttractorCurve = useAppStore((s) => s.addAttractorCurve)
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
   const removeAttractor = useAppStore((s) => s.removeAttractor)
@@ -142,6 +143,7 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
         selectedId={selectedId}
         planeSize={editorPlaneSize}
         onAdd={addAttractor}
+        onAddCurve={addAttractorCurve}
         onSelect={selectAttractor}
         onUpdate={updateAttractor}
         onRemove={removeAttractor}

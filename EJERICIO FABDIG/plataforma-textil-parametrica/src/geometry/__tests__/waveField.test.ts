@@ -6,7 +6,7 @@ import {
   MIN_RIB_THICKNESS_MM,
   MIN_RIB_HEIGHT_MM,
 } from '../waveField'
-import { createAttractor } from '../attractionField'
+import { createAttractor, createCurveAttractor } from '../attractionField'
 import { mmToThree, threeToMm } from '../../utils/units'
 import type { Boundary } from '../polygon'
 
@@ -125,6 +125,19 @@ describe('buildWaveField', () => {
     const tight = buildWaveField([], { ...base, spacingMm: 4 })
     expect(tight.ribCount).toBeGreaterThan(wide.ribCount)
     expect(tight.triangleCount).toBeGreaterThan(wide.triangleCount)
+  })
+
+  it('una curva atractora levanta costillas a lo largo de todo su trazo (no solo cerca de un punto)', () => {
+    // linea recta en Z=0 desde x=-8 hasta x=8 (u3d): con heightFloorMm en 0,
+    // solo deberia haber material cerca de esa linea.
+    const curve = createCurveAttractor(
+      [new THREE.Vector3(-8, 3, 0), new THREE.Vector3(8, 3, 0)],
+      { radius: 2, strength: 1, falloff: 'linear' },
+    )
+    const res = buildWaveField([curve], { ...base, heightFloorMm: 0, spacingMm: 10 })
+    // varias costillas deberian tener material (a lo largo de la linea),
+    // no solo una: eso distingue una curva de un atractor punto.
+    expect(res.segmentCount).toBeGreaterThan(1)
   })
 
   describe('con un contorno personalizado (base importada)', () => {

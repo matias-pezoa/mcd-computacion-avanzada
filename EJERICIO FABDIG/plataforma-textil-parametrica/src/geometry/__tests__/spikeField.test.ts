@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import { buildSpikeField, DEFAULT_SPIKE_FIELD } from '../spikeField'
 import { SAFE_OVERHANG_DEG, MIN_ROOT_RADIUS_MM, MIN_TIP_RADIUS_MM } from '../spike'
-import { createAttractor } from '../attractionField'
+import { createAttractor, createCurveAttractor } from '../attractionField'
 import type { Boundary } from '../polygon'
 
 const centerAttractor = () =>
@@ -119,6 +119,23 @@ describe('buildSpikeField', () => {
     for (let i = 0; i < pos.array.length; i++)
       expect(Number.isFinite(pos.array[i])).toBe(true)
     expect(res.bounds.isEmpty()).toBe(false)
+  })
+
+  it('una curva atractora siembra puas a lo largo de todo su trazo (no solo en sus puntos de control)', () => {
+    // sampleField mide distancia 3D: el radio tiene que cubrir la altura (y=3)
+    // del atractor ademas de la distancia horizontal a la linea.
+    const curve = createCurveAttractor(
+      [new THREE.Vector3(-8, 3, 0), new THREE.Vector3(8, 3, 0)],
+      { radius: 6, strength: 1, falloff: 'linear' },
+    )
+    const res = buildSpikeField([curve], { ...base, densityMin: 0, densityMax: 1, jitter: 0 })
+    expect(res.count).toBeGreaterThan(0)
+    // deberian aparecer puas cerca de ambos extremos de la linea, no solo
+    // agrupadas en el medio: eso distingue una curva de un atractor punto.
+    const nearLeft = res.placements.some((p) => p.x < -5)
+    const nearRight = res.placements.some((p) => p.x > 5)
+    expect(nearLeft).toBe(true)
+    expect(nearRight).toBe(true)
   })
 
   describe('con un contorno personalizado (base importada)', () => {

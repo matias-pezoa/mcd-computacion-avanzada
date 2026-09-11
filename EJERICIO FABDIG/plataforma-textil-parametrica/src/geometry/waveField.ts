@@ -55,7 +55,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { clamp } from '../utils/params'
 import type { NumberParam } from '../utils/params'
 import { mmToThree, threeToMm } from '../utils/units'
-import { falloff } from './attractionField'
+import { closestDistance2D, falloff } from './attractionField'
 import type { Attractor, CombineMode } from './attractionField'
 import { pointInBoundary, polygonBounds, type Boundary, type Vec2 } from './polygon'
 
@@ -308,9 +308,12 @@ function resolveDomain(planeSize: number, boundary?: Boundary | null): Domain {
 }
 
 /**
- * Ondulacion radial combinada de todos los atractores en (x, z), normalizada
- * a [0, 1]. 0 = sin influencia en ese punto (costilla en su altura piso),
- * 1 = cresta maxima.
+ * Ondulacion combinada de todos los atractores en (x, z), normalizada a
+ * [0, 1]. 0 = sin influencia en ese punto (costilla en su altura piso), 1 =
+ * cresta maxima. La distancia es al PUNTO mas cercano del atractor (radial
+ * para uno `kind: 'point'`, a la linea poligonal para uno `kind: 'curve'`,
+ * ver `closestDistance2D`) — asi una curva atractora genera una cresta a lo
+ * largo de todo su trazo, no solo en sus puntos de control.
  */
 function rippleHeight(
   x: number,
@@ -323,9 +326,7 @@ function rippleHeight(
   for (const a of attractors) {
     const strength = Math.max(0, a.strength) // solo relieve hacia arriba
     if (strength <= 0) continue
-    const dx = x - a.position.x
-    const dz = z - a.position.z
-    const d = Math.hypot(dx, dz)
+    const d = closestDistance2D(x, z, a)
     const envelope = falloff(a.falloff, d, a.radius) * strength
     if (envelope <= 0) continue
     const wave = 0.5 + 0.5 * Math.sin((2 * Math.PI * d) / wavelength)

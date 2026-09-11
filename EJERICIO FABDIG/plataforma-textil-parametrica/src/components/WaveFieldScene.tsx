@@ -50,7 +50,7 @@ export function WaveFieldScene({ geometry, planeSize }: WaveFieldSceneProps) {
         attractors={attractors}
         selectedId={selectedId}
         onSelect={selectAttractor}
-        onUpdate={(id, position) => updateAttractor(id, { position })}
+        onUpdate={updateAttractor}
       />
     </group>
   )

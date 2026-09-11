@@ -27,6 +27,7 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
   const attractors = useAppStore((s) => s.waveAttractors)
   const selectedId = useAppStore((s) => s.selectedWaveAttractorId)
   const addAttractor = useAppStore((s) => s.addWaveAttractor)
+  const addAttractorCurve = useAppStore((s) => s.addWaveAttractorCurve)
   const selectAttractor = useAppStore((s) => s.selectWaveAttractor)
   const updateAttractor = useAppStore((s) => s.updateWaveAttractor)
   const removeAttractor = useAppStore((s) => s.removeWaveAttractor)
@@ -107,6 +108,7 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
         selectedId={selectedId}
         planeSize={editorPlaneSize}
         onAdd={addAttractor}
+        onAddCurve={addAttractorCurve}
         onSelect={selectAttractor}
         onUpdate={updateAttractor}
         onRemove={removeAttractor}

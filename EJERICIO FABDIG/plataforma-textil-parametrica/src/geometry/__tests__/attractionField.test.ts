@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import * as THREE from 'three'
 import {
+  closestDistance2D,
+  closestPointOnAttractor,
   createAttractor,
+  createCurveAttractor,
   falloff,
   sampleField,
   type FalloffType,
@@ -65,5 +68,52 @@ describe('sampleField', () => {
     const s = sampleField(new THREE.Vector3(0, 0, 0), [])
     expect(s.value).toBe(0)
     expect(s.direction).toBeNull()
+  })
+
+  it('una curva atrae a lo largo de todo su trazo, no solo en sus puntos de control', () => {
+    const curve = createCurveAttractor(
+      [new THREE.Vector3(-10, 0, 0), new THREE.Vector3(10, 0, 0)],
+      { radius: 5, strength: 1, falloff: 'linear' },
+    )
+    // (0,0,0) esta a mitad de camino entre los dos puntos de control, lejos
+    // de ambos, pero SOBRE la linea -> deberia tener campo maximo ahi.
+    const onLine = sampleField(new THREE.Vector3(0, 0, 0), [curve])
+    const nearControlPoint = sampleField(new THREE.Vector3(-10, 0, 0), [curve])
+    expect(onLine.value).toBeCloseTo(1, 5)
+    expect(nearControlPoint.value).toBeCloseTo(1, 5)
+  })
+})
+
+describe('curvas atractoras', () => {
+  it('createCurveAttractor exige al menos 2 puntos', () => {
+    expect(() => createCurveAttractor([new THREE.Vector3(0, 0, 0)])).toThrow()
+  })
+
+  it('closestPointOnAttractor cae sobre el segmento, no en un punto de control', () => {
+    const curve = createCurveAttractor([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(10, 0, 0),
+    ])
+    const closest = closestPointOnAttractor(new THREE.Vector3(4, 0, 3), curve)
+    expect(closest.x).toBeCloseTo(4, 5)
+    expect(closest.z).toBeCloseTo(0, 5)
+  })
+
+  it('closestDistance2D usa el segmento mas cercano de una curva con varios tramos', () => {
+    const curve = createCurveAttractor([
+      new THREE.Vector3(0, 0, 0),
+      new THREE.Vector3(10, 0, 0),
+      new THREE.Vector3(10, 0, 10),
+    ])
+    // (10, _, 5) esta sobre el segundo tramo -> distancia ~0.
+    expect(closestDistance2D(10, 5, curve)).toBeCloseTo(0, 5)
+    // lejos de los dos tramos.
+    expect(closestDistance2D(-5, -5, curve)).toBeGreaterThan(5)
+  })
+
+  it('closestDistance2D de un atractor punto es la distancia radial de siempre', () => {
+    const p = createAttractor(new THREE.Vector3(3, 7, 4))
+    expect(closestDistance2D(3, 4, p)).toBeCloseTo(0, 6)
+    expect(closestDistance2D(0, 0, p)).toBeCloseTo(Math.hypot(3, 4), 6)
   })
 })

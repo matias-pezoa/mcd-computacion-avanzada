@@ -11,10 +11,12 @@ import { DEFAULT_WAVE_FIELD, type WaveFieldParams } from '../geometry/waveField'
 import { fitBoundaryToWidth, rescaleBoundary, type Vec2 } from '../geometry/polygon'
 import type { ImportedBoundary } from '../io/importSvg'
 import {
+  applyAttractorPatch,
   createAttractor,
+  createCurveAttractor,
   type Attractor,
+  type AttractorPatch,
   type CombineMode,
-  type FalloffType,
 } from '../geometry/attractionField'
 
 export type AppMode = 'volume' | 'wave' | 'laser'
@@ -59,14 +61,16 @@ export interface AppState {
   toggleAlignToField: () => void
 
   addAttractor: (position: [number, number, number]) => void
-  updateAttractor: (id: string, patch: Partial<Omit<Attractor, 'id'>>) => void
+  addAttractorCurve: (points: readonly [number, number, number][]) => void
+  updateAttractor: (id: string, patch: AttractorPatch) => void
   removeAttractor: (id: string) => void
   selectAttractor: (id: string | null) => void
 
   setWaveParam: (key: WaveNumericKey, value: number) => void
   setWaveCombine: (mode: CombineMode) => void
   addWaveAttractor: (position: [number, number, number]) => void
-  updateWaveAttractor: (id: string, patch: Partial<Omit<Attractor, 'id'>>) => void
+  addWaveAttractorCurve: (points: readonly [number, number, number][]) => void
+  updateWaveAttractor: (id: string, patch: AttractorPatch) => void
   removeWaveAttractor: (id: string) => void
   selectWaveAttractor: (id: string | null) => void
 
@@ -75,6 +79,10 @@ export interface AppState {
   clearBaseShape: () => void
 
   reset: () => void
+}
+
+function toVec3s(points: readonly [number, number, number][]): THREE.Vector3[] {
+  return points.map(([x, y, z]) => new THREE.Vector3(x, y, z))
 }
 
 function initialAttractors(): Attractor[] {
@@ -89,6 +97,14 @@ function initialAttractors(): Attractor[] {
       strength: 0.65,
       falloff: 'linear',
     }),
+    createCurveAttractor(
+      toVec3s([
+        [6, 3, -8],
+        [9, 3, 0],
+        [6, 3, 8],
+      ]),
+      { radius: 5, strength: 0.8, falloff: 'linear' },
+    ),
   ]
 }
 
@@ -104,6 +120,14 @@ function initialWaveAttractors(): Attractor[] {
       strength: 0.8,
       falloff: 'linear',
     }),
+    createCurveAttractor(
+      toVec3s([
+        [-8, 3, 6],
+        [0, 3, 9],
+        [8, 3, 6],
+      ]),
+      { radius: 4, strength: 0.9, falloff: 'linear' },
+    ),
   ]
 }
 
@@ -133,9 +157,15 @@ export const useAppStore = create<AppState>((set) => ({
       return { attractors: [...s.attractors, a], selectedAttractorId: a.id }
     }),
 
+  addAttractorCurve: (points) =>
+    set((s) => {
+      const a = createCurveAttractor(toVec3s(points))
+      return { attractors: [...s.attractors, a], selectedAttractorId: a.id }
+    }),
+
   updateAttractor: (id, patch) =>
     set((s) => ({
-      attractors: s.attractors.map((a) => (a.id === id ? applyPatch(a, patch) : a)),
+      attractors: s.attractors.map((a) => (a.id === id ? applyAttractorPatch(a, patch) : a)),
     })),
 
   removeAttractor: (id) =>
@@ -156,10 +186,16 @@ export const useAppStore = create<AppState>((set) => ({
       return { waveAttractors: [...s.waveAttractors, a], selectedWaveAttractorId: a.id }
     }),
 
+  addWaveAttractorCurve: (points) =>
+    set((s) => {
+      const a = createCurveAttractor(toVec3s(points))
+      return { waveAttractors: [...s.waveAttractors, a], selectedWaveAttractorId: a.id }
+    }),
+
   updateWaveAttractor: (id, patch) =>
     set((s) => ({
       waveAttractors: s.waveAttractors.map((a) =>
-        a.id === id ? applyPatch(a, patch) : a,
+        a.id === id ? applyAttractorPatch(a, patch) : a,
       ),
     })),
 
@@ -215,12 +251,3 @@ export const useAppStore = create<AppState>((set) => ({
       selectedWaveAttractorId: null,
     }),
 }))
-
-function applyPatch(a: Attractor, patch: Partial<Omit<Attractor, 'id'>>): Attractor {
-  return {
-    ...a,
-    ...patch,
-    position: patch.position ? patch.position.clone() : a.position,
-    falloff: (patch.falloff as FalloffType | undefined) ?? a.falloff,
-  }
-}

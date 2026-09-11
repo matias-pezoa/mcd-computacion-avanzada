@@ -38,7 +38,7 @@ export function SpikeFieldScene({ geometry, planeSize }: SpikeFieldSceneProps) {
         attractors={attractors}
         selectedId={selectedId}
         onSelect={selectAttractor}
-        onUpdate={(id, position) => updateAttractor(id, { position })}
+        onUpdate={updateAttractor}
       />
     </group>
   )
