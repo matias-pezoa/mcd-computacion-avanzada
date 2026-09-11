@@ -51,10 +51,17 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
         <h3>Factibilidad de impresion (FDM)</h3>
         <p className="hint">
           Los limites de abajo son pisos/techos de fabricacion: ningun slider puede
-          generar una pua no imprimible. Vuelo autosoportado ≤ {SAFE_OVERHANG_DEG}°, radio
-          de base ≥ {MIN_ROOT_RADIUS_MM}mm (adherencia a la tela), radio de punta ≥{' '}
+          generar una pua no imprimible. Vuelo por capa ≤ {SAFE_OVERHANG_DEG}°, radio de
+          base ≥ {MIN_ROOT_RADIUS_MM}mm (adherencia a la tela), radio de punta ≥{' '}
           {MIN_TIP_RADIUS_MM}mm (ancho de una linea de extrusion). Las puas nunca se
           solapan entre si.
+        </p>
+        <p className="hint">
+          Ademas, la inclinacion se recorta SEGUNDA VEZ segun la altura y el ancho de la
+          propia base: una pua alta y angosta hace palanca sobre su punto de apoyo y puede
+          despegarlo de la cama/tela aunque el vuelo por capa sea valido, asi que se
+          inclina menos (o nada) automaticamente. Abajo se cuenta cuantas puas quedaron
+          asi limitadas.
         </p>
       </section>
 
@@ -181,6 +188,10 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
           <div>
             <dt>Descartadas por solape</dt>
             <dd>{result.rejectedByOverlap}</dd>
+          </div>
+          <div>
+            <dt>Limitadas por estabilidad de base</dt>
+            <dd>{result.limitedByStabilityCount}</dd>
           </div>
           <div>
             <dt>Triangulos</dt>

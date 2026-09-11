@@ -4,6 +4,7 @@ import {
   buildSpike,
   spikeGeometry,
   SAFE_OVERHANG_DEG,
+  BASE_STABILITY_FACTOR,
   MIN_ROOT_RADIUS_MM,
   MIN_TIP_RADIUS_MM,
 } from '../spike'
@@ -96,6 +97,42 @@ describe('buildSpike', () => {
       maxOverhangDeg: 45,
     })
     expect(leaned.footprintRadius).toBeGreaterThan(straight.footprintRadius)
+  })
+
+  it('una pua alta y angosta se inclina menos que una baja y ancha pidiendo lo mismo', () => {
+    const tallNarrow = buildSpike(base, new THREE.Vector2(1, 0), {
+      height: 6,
+      rootRadiusMm: 2,
+      tipRadiusMm: 1,
+      leanDeg: 40,
+      maxOverhangDeg: 45,
+    })
+    const shortWide = buildSpike(base, new THREE.Vector2(1, 0), {
+      height: 0.5,
+      rootRadiusMm: 8,
+      tipRadiusMm: 1,
+      leanDeg: 40,
+      maxOverhangDeg: 45,
+    })
+    expect(tallNarrow.limitedByStability).toBe(true)
+    expect(shortWide.limitedByStability).toBe(false)
+    expect(tallNarrow.leanDegApplied).toBeLessThan(shortWide.leanDegApplied)
+    expect(shortWide.leanDegApplied).toBeCloseTo(40, 6) // no la toco ninguno de los dos limites
+  })
+
+  it('cuando la estabilidad limita, la deriva horizontal no supera BASE_STABILITY_FACTOR * radio de base', () => {
+    const s = buildSpike(base, new THREE.Vector2(1, 0), {
+      height: 10,
+      rootRadiusMm: 1.5,
+      tipRadiusMm: 0.5,
+      leanDeg: 44, // pide casi el maximo permitido por vuelo
+      maxOverhangDeg: 45,
+    })
+    expect(s.limitedByStability).toBe(true)
+    const horizontalDrift = Math.hypot(s.tip.x - s.base.x, s.tip.z - s.base.z)
+    expect(horizontalDrift).toBeLessThanOrEqual(
+      s.rootRadius * BASE_STABILITY_FACTOR + 1e-6,
+    )
   })
 
   it('spikeGeometry produce un solido cerrado, indexado y sin NaN', () => {

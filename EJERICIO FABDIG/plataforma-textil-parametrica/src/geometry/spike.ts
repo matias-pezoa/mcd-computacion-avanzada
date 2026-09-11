@@ -19,13 +19,24 @@
  *   - El radio de la base (raiz) nunca baja de un piso en mm, para que la
  *     primera capa tenga area de contacto suficiente con la tela.
  *
+ * Ojo: el limite de vuelo por capa (arriba) NO evita que una pua se despegue
+ * de la cama/tela. Ese es un problema distinto: una pua alta e inclinada hace
+ * palanca sobre su propia base (el peso/las fuerzas de la boquilla se
+ * transmiten como un torque en el punto de apoyo) y puede despegarla aunque
+ * cada corte individual sea "imprimible". Por eso la inclinacion tiene un
+ * SEGUNDO limite, independiente del vuelo: que la punta nunca proyecte, en
+ * horizontal, mas alla de `BASE_STABILITY_FACTOR` veces el radio de la propia
+ * base. En la practica esto hace que las puas altas y angostas se inclinen
+ * poco (o nada) aunque el campo pida mas — es la restriccion correcta, no un
+ * bug: una pua alta y angosta inclinada de verdad SI se despega.
+ *
  * Es ademas un solido cerrado (tapas incluidas): sin paredes delgadas que
  * dependan de normales para no verse como una lamina de espesor cero.
  *
  * Funcion pura.
  */
 import * as THREE from 'three'
-import { clamp, DEG2RAD } from '../utils/params'
+import { clamp, DEG2RAD, RAD2DEG } from '../utils/params'
 import type { NumberParam } from '../utils/params'
 import { mmToThree } from '../utils/units'
 
@@ -35,6 +46,14 @@ import { mmToThree } from '../utils/units'
  * ningun parametro puede llevar una pua por encima de esto.
  */
 export const SAFE_OVERHANG_DEG = 45
+
+/**
+ * Cuantos "radios de base" puede proyectar la punta en horizontal antes de
+ * que la palanca arriesgue despegar la base de la cama/tela. 1.0 = la punta
+ * nunca queda mas lejos del eje vertical de la base que su propio radio; es
+ * una regla conservadora y facil de explicar, no un calculo estructural fino.
+ */
+export const BASE_STABILITY_FACTOR = 1
 
 /** Pisos de fabricacion, en mm (boquilla tipica de 0.4mm). */
 export const MIN_TIP_RADIUS_MM = 0.5
@@ -48,7 +67,7 @@ export const SPIKE_UI_PARAMS: readonly NumberParam[] = [
     min: 0.1,
     max: 6,
     step: 0.05,
-    default: 0.8,
+    default: 0.6,
     unit: 'u3d',
   },
   {
@@ -57,7 +76,7 @@ export const SPIKE_UI_PARAMS: readonly NumberParam[] = [
     min: 0,
     max: 8,
     step: 0.05,
-    default: 2.2,
+    default: 1.6,
     unit: 'u3d',
   },
   {
@@ -66,7 +85,7 @@ export const SPIKE_UI_PARAMS: readonly NumberParam[] = [
     min: MIN_ROOT_RADIUS_MM,
     max: 12,
     step: 0.1,
-    default: 2.5,
+    default: 3,
     unit: 'mm',
   },
   {
@@ -75,7 +94,7 @@ export const SPIKE_UI_PARAMS: readonly NumberParam[] = [
     min: 0,
     max: 12,
     step: 0.1,
-    default: 2.5,
+    default: 4,
     unit: 'mm',
   },
   {
@@ -116,7 +135,7 @@ export const SPIKE_UI_PARAMS: readonly NumberParam[] = [
   },
   {
     key: 'maxOverhangDeg',
-    label: 'Vuelo maximo autosoportado',
+    label: 'Vuelo maximo (por capa)',
     min: 0,
     max: SAFE_OVERHANG_DEG,
     step: 1,
@@ -167,6 +186,8 @@ export interface Spike {
   footprintRadius: number
   /** Inclinacion realmente aplicada (tras recortar), en grados. */
   leanDegApplied: number
+  /** true si la inclinacion pedida se recorto por estabilidad (no por vuelo). */
+  limitedByStability: boolean
 }
 
 const UP = new THREE.Vector3(0, 1, 0)
@@ -184,10 +205,20 @@ export function buildSpike(
     leanDir.lengthSq() > 1e-8 ? leanDir.clone().normalize() : new THREE.Vector2(1, 0)
   const horiz = new THREE.Vector3(dir.x, 0, dir.y)
 
-  const maxOverhang = clamp(params.maxOverhangDeg, 0, SAFE_OVERHANG_DEG)
-  const leanDeg = clamp(params.leanDeg, 0, maxOverhang)
-  const lean = leanDeg * DEG2RAD
   const height = Math.max(1e-3, params.height)
+  const rootRadius = mmToThree(Math.max(MIN_ROOT_RADIUS_MM, params.rootRadiusMm))
+  const tipRadius = mmToThree(Math.max(MIN_TIP_RADIUS_MM, params.tipRadiusMm))
+
+  // limite 1: vuelo por capa (autosoportado sin soporte).
+  const overhangCeilingDeg = clamp(params.maxOverhangDeg, 0, SAFE_OVERHANG_DEG)
+  // limite 2: estabilidad de la base (no hacer palanca y despegarla). Cuando
+  // la pua es baja y ancha, atan(...) da un angulo grande y no restringe nada.
+  const stabilityCeilingDeg =
+    Math.atan2(rootRadius * BASE_STABILITY_FACTOR, height) * RAD2DEG
+  const leanCeilingDeg = Math.min(overhangCeilingDeg, stabilityCeilingDeg)
+
+  const leanDeg = clamp(params.leanDeg, 0, leanCeilingDeg)
+  const lean = leanDeg * DEG2RAD
 
   const horizontalDrift = height * Math.tan(lean)
   const tip = base
@@ -199,8 +230,6 @@ export function buildSpike(
   const axisLength = Math.max(axisVec.length(), 1e-6)
   const axis = axisVec.clone().multiplyScalar(1 / axisLength)
 
-  const rootRadius = mmToThree(Math.max(MIN_ROOT_RADIUS_MM, params.rootRadiusMm))
-  const tipRadius = mmToThree(Math.max(MIN_TIP_RADIUS_MM, params.tipRadiusMm))
   const footprintRadius = Math.max(rootRadius, horizontalDrift + tipRadius)
 
   return {
@@ -212,6 +241,11 @@ export function buildSpike(
     axisLength,
     footprintRadius,
     leanDegApplied: leanDeg,
+    // la estabilidad fue la que realmente recorto el pedido (no solo que su
+    // techo sea mas bajo que el de vuelo, sino que el pedido lo supero).
+    limitedByStability:
+      stabilityCeilingDeg < overhangCeilingDeg - 1e-6 &&
+      params.leanDeg > stabilityCeilingDeg + 1e-6,
   }
 }
 

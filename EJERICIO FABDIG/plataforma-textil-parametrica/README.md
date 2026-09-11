@@ -41,8 +41,13 @@ solidas (cono truncado, no una pared delgada) que crecen desde el plano. La
 atractores**, no de edicion manual — y estan limitados por construccion a lo
 que una impresora FDM puede imprimir sin soporte:
 
-- **Vuelo autosoportado ≤ 45°**: cada pua es una linea recta de base a punta con
-  angulo constante, asi que ningun tramo vuela mas que el resto.
+- **Vuelo por capa ≤ 45°**: cada pua es una linea recta de base a punta con
+  angulo constante, asi que ningun corte individual vuela mas que el anterior.
+- **Estabilidad de la base**: ademas del vuelo, la inclinacion se limita segun
+  la altura y el ancho de la propia base — una pua alta y angosta hace palanca
+  sobre su punto de apoyo y puede despegarlo de la cama/tela aunque cada capa
+  sea valida por si sola. Por eso se inclina menos (o nada) automaticamente
+  cuanto mas alta y angosta es (el panel cuenta cuantas quedaron asi limitadas).
 - **Radio minimo en la punta y en la base**: la punta nunca se afina por debajo
   del ancho de una linea de extrusion; la base nunca baja de un area de
   contacto real para adherirse a la tela.

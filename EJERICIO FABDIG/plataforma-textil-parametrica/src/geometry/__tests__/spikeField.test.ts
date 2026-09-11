@@ -93,6 +93,24 @@ describe('buildSpikeField', () => {
     }
   })
 
+  it('limitedByStabilityCount coincide con las puas marcadas y crece con puas altas y angostas', () => {
+    const res = buildSpikeField([centerAttractor()], {
+      ...base,
+      heightBase: 5,
+      heightField: 5,
+      rootRadiusBaseMm: MIN_ROOT_RADIUS_MM,
+      rootRadiusFieldMm: 0,
+      leanDegBase: 40,
+      leanDegField: 0,
+      maxOverhangDeg: 45,
+    })
+    expect(res.count).toBeGreaterThan(0)
+    const flagged = res.placements.filter((p) => p.limitedByStability).length
+    expect(res.limitedByStabilityCount).toBe(flagged)
+    // altas (5-10 u3d) y angostas (radio minimo): la estabilidad SI debe actuar.
+    expect(res.limitedByStabilityCount).toBeGreaterThan(0)
+  })
+
   it('genera una malla solida valida (indexada, sin NaN)', () => {
     const res = buildSpikeField([centerAttractor()], base)
     expect(res.geometry.getIndex()).not.toBeNull()

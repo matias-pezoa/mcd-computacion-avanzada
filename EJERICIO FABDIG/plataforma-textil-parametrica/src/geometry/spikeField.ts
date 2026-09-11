@@ -63,10 +63,10 @@ export const DEFAULT_SPIKE_FIELD: SpikeFieldParams = {
   maxCount: 260,
   seed: 4242,
   combine: 'max',
-  heightBase: 0.8,
-  heightField: 2.2,
-  rootRadiusBaseMm: 2.5,
-  rootRadiusFieldMm: 2.5,
+  heightBase: 0.6,
+  heightField: 1.6,
+  rootRadiusBaseMm: 3,
+  rootRadiusFieldMm: 4,
   tipRadiusBaseMm: 0.8,
   tipRadiusFieldMm: 0.6,
   leanDegBase: 8,
@@ -155,6 +155,8 @@ export interface SpikePlacement {
   field: number
   /** Radio conservador de la huella sobre el plano (unidades Three), ver spike.ts. */
   footprintRadius: number
+  /** true si la inclinacion pedida se recorto por estabilidad de la base. */
+  limitedByStability: boolean
 }
 
 export interface SpikeFieldResult {
@@ -166,6 +168,8 @@ export interface SpikeFieldResult {
   triangleCount: number
   /** Cuantos candidatos se descartaron solo por solaparse con una pua vecina. */
   rejectedByOverlap: number
+  /** Cuantas puas colocadas se inclinaron menos de lo pedido para no despegar la base. */
+  limitedByStabilityCount: number
   placements: SpikePlacement[]
 }
 
@@ -189,6 +193,7 @@ export function buildSpikeField(
   const placed: Footprint[] = []
   const placements: SpikePlacement[] = []
   let rejectedByOverlap = 0
+  let limitedByStabilityCount = 0
 
   const p = new THREE.Vector3()
   const leanDir = new THREE.Vector2()
@@ -237,6 +242,7 @@ export function buildSpikeField(
 
       placed.push({ x, z, r: spike.footprintRadius })
       geoms.push(spikeGeometry(spike, params.segments))
+      if (spike.limitedByStability) limitedByStabilityCount++
       placements.push({
         x,
         z,
@@ -246,6 +252,7 @@ export function buildSpikeField(
         leanDeg: spike.leanDegApplied,
         field: field.value,
         footprintRadius: spike.footprintRadius,
+        limitedByStability: spike.limitedByStability,
       })
 
       if (geoms.length >= params.maxCount) break outer
@@ -267,6 +274,7 @@ export function buildSpikeField(
     count: placements.length,
     triangleCount: indexCount(geometry) / 3,
     rejectedByOverlap,
+    limitedByStabilityCount,
     placements,
   }
 }

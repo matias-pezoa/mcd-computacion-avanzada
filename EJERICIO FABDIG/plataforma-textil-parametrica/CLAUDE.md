@@ -27,9 +27,17 @@ arqueaba hasta ~150°) era visualmente interesante pero NO imprimible: vuelo
 extremo sin soporte, punta mas fina que una linea de extrusion, base sin area
 de contacto para adherirse a la tela. Se reemplazo por una "pua" solida (cono
 truncado, ver `geometry/spike.ts`) que es imprimible **por construccion**:
-- Inclinacion siempre <= `SAFE_OVERHANG_DEG` (45°, el limite generico de vuelo
-  autosoportado en FDM). La pua es una linea recta de base a punta con angulo
-  CONSTANTE, asi que ningun tramo vuela mas que el resto.
+- Vuelo por capa siempre <= `SAFE_OVERHANG_DEG` (45°, el limite generico de
+  vuelo autosoportado en FDM). La pua es una linea recta de base a punta con
+  angulo CONSTANTE, asi que ningun corte individual vuela mas que el anterior.
+- **Estabilidad de la base (segundo limite, independiente del vuelo):** una pua
+  alta y angosta puede tener CADA corte dentro del vuelo autosoportado y aun
+  asi despegarse de la cama/tela, porque el peso/las fuerzas de impresion hacen
+  palanca sobre el punto de apoyo. Por eso la inclinacion tambien se recorta a
+  que la punta nunca proyecte, en horizontal, mas de `BASE_STABILITY_FACTOR`
+  (=1) veces el radio de la propia base — `atan2(rootRadius, height)`. Esto se
+  detecto con impresiones reales (las bases se despegaban) y quedo documentado
+  en el codigo para que no se "arregle" subiendo el vuelo de nuevo.
 - Radio de punta y de base con piso en mm (`MIN_TIP_RADIUS_MM`,
   `MIN_ROOT_RADIUS_MM`) para que la punta no colapse y la base tenga area de
   adherencia real sobre la tela.
@@ -104,7 +112,9 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
 
 - `geometry/spike.ts`: `buildSpike(base, leanDir, params)` -> `Spike` (base,
   punta, eje, radios YA con piso aplicado, `footprintRadius`, `leanDegApplied`
-  YA recortado a `[0, min(maxOverhangDeg, SAFE_OVERHANG_DEG)]`). `spikeGeometry`
+  YA recortado al MENOR de dos techos — vuelo (`maxOverhangDeg`, tope absoluto
+  `SAFE_OVERHANG_DEG`) y estabilidad (`atan2(rootRadius*BASE_STABILITY_FACTOR,
+  height)`) — y `limitedByStability` indicando cual gano). `spikeGeometry`
   construye el cono truncado (CylinderGeometry orientado + trasladado), solido
   y cerrado. `segments` bajo (3-6) da piramides/prismas; alto da un cono liso.
 - `geometry/attractionField.ts`: sin cambios — `Attractor`, `sampleField`.
@@ -112,19 +122,22 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
   puntos en el plano por densidad del campo (grilla + jitter, como antes);
   cada pua toma altura/radios/inclinacion del campo, se inclina ALEJANDOSE del
   atractor, y se **rechaza si su huella se solapa con una ya colocada**
-  (`rejectedByOverlap` queda en el resultado). Fusiona todas las puas en una
-  sola malla (`geometry`), lista para exportar sin pasos adicionales.
-  Determinista por seed, tope `maxCount`.
+  (`rejectedByOverlap`). Cuenta ademas cuantas quedaron `limitedByStability`
+  (`limitedByStabilityCount`). Fusiona todas las puas en una sola malla
+  (`geometry`), lista para exportar sin pasos adicionales. Determinista por
+  seed, tope `maxCount`.
 - UI: `SpikeFieldScene` (base de tela + malla solida + gizmos de atractores;
   clic en el plano agrega atractor, arrastre lo mueve) y `SpikeFieldPanel`
-  (seccion "Factibilidad de impresion" con los limites explicados, base y
-  distribucion, forma de la pua, atractores, export STL + stats incluyendo
-  cuantas puas se descartaron por solape).
+  (seccion "Factibilidad de impresion" explicando AMBOS limites, base y
+  distribucion, forma de la pua, atractores, export STL + stats: descartadas
+  por solape y limitadas por estabilidad de base).
 - Tests: `spike.test.ts` (angulo constante en toda la longitud, pisos de radio,
-  techo `SAFE_OVERHANG_DEG` defensivo, malla solida sin NaN),
-  `spikeField.test.ts` (determinismo, densidad vs atractor, maxCount, CERO
-  solapes entre pares de puas, pisos de fabricacion respetados),
-  `attractionField.test.ts`. 20 casos.
+  techo `SAFE_OVERHANG_DEG` defensivo, malla solida sin NaN, pua alta/angosta
+  se inclina menos que una baja/ancha, deriva horizontal nunca supera
+  `rootRadius * BASE_STABILITY_FACTOR`), `spikeField.test.ts` (determinismo,
+  densidad vs atractor, maxCount, CERO solapes entre pares, pisos de
+  fabricacion respetados, `limitedByStabilityCount` coincide con los
+  placements marcados), `attractionField.test.ts`. 23 casos.
 
 ### Pendiente / notas para retomar
 - **Modo Corte laser** (siguiente): 2D puro. Familias parametricas — empezar por
@@ -132,10 +145,16 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
   proyectados, para que el corte calce con la pieza 3D si se pega por separado),
   luego reticula auxetica y escamas. Render en canvas/SVG aparte del viewport
   3D. Export SVG (grupos por capa) y DXF. Kerf con Clipper2 mas adelante.
-- `SAFE_OVERHANG_DEG = 45` es un valor generico razonable para FDM sin soporte;
-  si se calibra con la impresora/material real del usuario, exponerlo como
-  configuracion en vez de constante — hoy es deliberadamente no editable mas
-  alla del slider `maxOverhangDeg` (que nunca puede superarlo).
+- `SAFE_OVERHANG_DEG = 45` y `BASE_STABILITY_FACTOR = 1` son valores genericos
+  razonables, no medidos contra una impresora/material especifico. Si el
+  usuario calibra con pruebas reales, exponerlos como configuracion en vez de
+  constantes — hoy son deliberadamente no editables mas alla del slider
+  `maxOverhangDeg` (que nunca puede superar `SAFE_OVERHANG_DEG`).
+- Con los defaults actuales, casi todas las puas altas/densas quedan
+  `limitedByStability` (es lo esperado: mas alto + base minima = menos
+  inclinacion posible). Si se quiere mas inclinacion visible por defecto, subir
+  `rootRadiusBaseMm`/`rootRadiusFieldMm` o bajar `heightBase`/`heightField` en
+  `DEFAULT_SPIKE_FIELD` — no aflojar `BASE_STABILITY_FACTOR`.
 - Los `default` de algunos `NumberParam` no coinciden 1:1 con
   `DEFAULT_SPIKE_FIELD` (la fuente de verdad es la constante; el descriptor solo
   alimenta tooltips). Alinear si se agrega "reset por slider".
