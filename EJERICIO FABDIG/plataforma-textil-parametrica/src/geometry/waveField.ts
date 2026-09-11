@@ -31,6 +31,7 @@ import { mmToThree, threeToMm } from '../utils/units'
 import { SAFE_OVERHANG_DEG } from './printability'
 import { falloff } from './attractionField'
 import type { Attractor, CombineMode } from './attractionField'
+import { pointInBoundary, polygonBounds, type Boundary, type Vec2 } from './polygon'
 
 /** Piso de espesor de la base, en mm (2 perimetros de una boquilla de 0.4mm). */
 export const MIN_BASE_THICKNESS_MM = 0.8
@@ -126,7 +127,8 @@ export interface WaveFieldResult {
   geometry: THREE.BufferGeometry
   bounds: THREE.Box3
   triangleCount: number
-  segmentsPerAxis: number
+  segmentsU: number
+  segmentsV: number
   /** Amplitud efectivamente usada (mm), tras el recorte de seguridad. */
   appliedAmplitudeMm: number
   /** true si la amplitud pedida se recorto por vuelo autosoportado. */
@@ -136,6 +138,7 @@ export interface WaveFieldResult {
 export function buildWaveField(
   attractors: readonly Attractor[],
   params: WaveFieldParams,
+  boundary?: Boundary | null,
 ): WaveFieldResult {
   const thickness = mmToThree(Math.max(MIN_BASE_THICKNESS_MM, params.thicknessBaseMm))
   const wavelength = mmToThree(Math.max(MIN_WAVELENGTH_MM, params.wavelengthMm))
@@ -147,16 +150,22 @@ export function buildWaveField(
   const requestedAmplitude = mmToThree(Math.max(0, params.amplitudeMm))
   const amplitude = Math.min(requestedAmplitude, maxSafeAmplitude)
 
+  const domain = resolveDomain(params.planeSize, boundary)
+  const width = domain.maxX - domain.minX
+  const height = domain.maxZ - domain.minZ
+
   const facetsPerWave = Math.max(1, Math.round(params.facetsPerWave))
   const segmentLength = wavelength / facetsPerWave
-  const n = clamp(Math.round(params.planeSize / segmentLength), 4, MAX_SEGMENTS_PER_AXIS)
+  const nu = clamp(Math.round(width / segmentLength), 4, MAX_SEGMENTS_PER_AXIS)
+  const nv = clamp(Math.round(height / segmentLength), 4, MAX_SEGMENTS_PER_AXIS)
 
   const heightAt = (x: number, z: number): number =>
     rippleHeight(x, z, attractors, params.combine, wavelength) * amplitude
 
   const { positions, indices } = buildSolidHeightfield(
-    params.planeSize,
-    n,
+    domain,
+    nu,
+    nv,
     thickness,
     heightAt,
   )
@@ -168,16 +177,56 @@ export function buildWaveField(
   geometry.computeBoundingBox()
   geometry.computeBoundingSphere()
 
-  const bounds = new THREE.Box3()
-  if (geometry.boundingBox) bounds.copy(geometry.boundingBox)
+  // Ojo: geometry.computeBoundingBox() recorre TODO el atributo position, sin
+  // filtrar por el indice — con una base recortada (boundary) quedan vertices
+  // "huerfanos" (celdas fuera del dominio, no referenciadas por ningun
+  // triangulo) que igual tienen una altura calculada e inflarian el
+  // "Dimensiones" que ve el usuario. Las dimensiones reportadas se calculan
+  // SOLO sobre los vertices realmente indexados (los que forman parte del solido).
+  const bounds = computeIndexedBounds(positions, indices)
 
   return {
     geometry,
     bounds,
     triangleCount: indices.length / 3,
-    segmentsPerAxis: n,
+    segmentsU: nu,
+    segmentsV: nv,
     appliedAmplitudeMm: threeToMm(amplitude),
     amplitudeLimited: amplitude < requestedAmplitude - 1e-9,
+  }
+}
+
+interface Domain {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+  /** true si (x,z) cae dentro del area a llenar. */
+  test: (x: number, z: number) => boolean
+}
+
+/**
+ * Sin `boundary`: el cuadrado `planeSize` de siempre (test siempre true).
+ * Con `boundary` (p. ej. una pieza de patron importada, en mm): su caja
+ * envolvente en unidades Three, y el test es "dentro del contorno externo y
+ * fuera de los agujeros".
+ */
+function resolveDomain(planeSize: number, boundary?: Boundary | null): Domain {
+  if (!boundary) {
+    const half = planeSize / 2
+    return { minX: -half, maxX: half, minZ: -half, maxZ: half, test: () => true }
+  }
+  const toThree = (pts: readonly Vec2[]): Vec2[] =>
+    pts.map(([x, z]) => [mmToThree(x), mmToThree(z)])
+  const outer = toThree(boundary.outer)
+  const holes = boundary.holes.map(toThree)
+  const b = polygonBounds(outer)
+  return {
+    minX: b.minX,
+    maxX: b.maxX,
+    minZ: b.minZ,
+    maxZ: b.maxZ,
+    test: (x, z) => pointInBoundary(x, z, { outer, holes }),
   }
 }
 
@@ -210,86 +259,129 @@ function rippleHeight(
 
 /**
  * Extruye un campo de alturas `heightAt(x,z)` (por encima de `thickness`) en
- * un solido cerrado: base plana en y=0, superficie superior ondulada, y
- * paredes laterales que unen ambas. La orientacion de cada triangulo se
- * decide comparando su normal con una direccion de referencia "mas o menos
- * hacia afuera" para esa cara, asi que no depende de acertar un convenio de
- * indices a mano.
+ * un solido cerrado sobre el area que pasa `domain.test`: base plana en y=0,
+ * superficie superior ondulada, y paredes laterales que unen ambas siguiendo
+ * el CONTORNO real del area rellena (no necesariamente un rectangulo).
+ *
+ * Enfoque: se generan los vertices de TODA la grilla (rectangulo envolvente),
+ * pero solo se emiten triangulos de tapa para las celdas cuyo CENTRO cae
+ * dentro del dominio (mascara); las paredes se agregan en cada arista de una
+ * celda rellena cuyo vecino en esa direccion NO esta rellena (fuera de la
+ * grilla o fuera del dominio) — asi el contorno sale "a escalones" del tamaño
+ * de la grilla, valido para cualquier forma sin necesitar triangular el
+ * poligono exacto. La orientacion de cada triangulo se decide comparando su
+ * normal con una direccion de referencia "mas o menos hacia afuera" (para las
+ * paredes, del centro de la celda hacia la arista), asi que no depende de
+ * acertar un convenio de indices a mano.
  */
 function buildSolidHeightfield(
-  planeSize: number,
-  n: number,
+  domain: Domain,
+  nu: number,
+  nv: number,
   thickness: number,
   heightAt: (x: number, z: number) => number,
 ): { positions: number[]; indices: number[] } {
-  const half = planeSize / 2
-  const row = n + 1
-  const idx = (iv: number, iu: number): number => iv * row + iu
+  const width = domain.maxX - domain.minX
+  const height = domain.maxZ - domain.minZ
+  const rowU = nu + 1
+  const idx = (iv: number, iu: number): number => iv * rowU + iu
+  const gridX = (iu: number): number => domain.minX + (iu / nu) * width
+  const gridZ = (iv: number): number => domain.minZ + (iv / nv) * height
 
   const positions: number[] = []
   const topStart = 0
-  for (let iv = 0; iv < row; iv++) {
-    for (let iu = 0; iu < row; iu++) {
-      const x = (iu / n) * planeSize - half
-      const z = (iv / n) * planeSize - half
+  for (let iv = 0; iv <= nv; iv++) {
+    for (let iu = 0; iu <= nu; iu++) {
+      const x = gridX(iu)
+      const z = gridZ(iv)
       positions.push(x, thickness + heightAt(x, z), z)
     }
   }
   const botStart = positions.length / 3
-  for (let iv = 0; iv < row; iv++) {
-    for (let iu = 0; iu < row; iu++) {
-      const x = (iu / n) * planeSize - half
-      const z = (iv / n) * planeSize - half
-      positions.push(x, 0, z)
+  for (let iv = 0; iv <= nv; iv++) {
+    for (let iu = 0; iu <= nu; iu++) {
+      positions.push(gridX(iu), 0, gridZ(iv))
     }
   }
+
+  // mascara por celda (centro de la celda dentro del dominio)
+  const filled = new Uint8Array(nu * nv)
+  for (let iv = 0; iv < nv; iv++) {
+    for (let iu = 0; iu < nu; iu++) {
+      const cx = domain.minX + ((iu + 0.5) / nu) * width
+      const cz = domain.minZ + ((iv + 0.5) / nv) * height
+      filled[iv * nu + iu] = domain.test(cx, cz) ? 1 : 0
+    }
+  }
+  const isFilled = (iv: number, iu: number): boolean =>
+    iv >= 0 && iv < nv && iu >= 0 && iu < nu && filled[iv * nu + iu] === 1
 
   const indices: number[] = []
   const pushTri = (i0: number, i1: number, i2: number, ref: [number, number, number]) => {
     pushOutwardTri(positions, indices, i0, i1, i2, ref)
   }
+  const vx = (i: number): number => positions[i * 3]
+  const vz = (i: number): number => positions[i * 3 + 2]
 
-  // superficie superior e inferior
-  for (let iv = 0; iv < n; iv++) {
-    for (let iu = 0; iu < n; iu++) {
+  for (let iv = 0; iv < nv; iv++) {
+    for (let iu = 0; iu < nu; iu++) {
+      if (!isFilled(iv, iu)) continue
       const a = idx(iv, iu)
       const b = idx(iv, iu + 1)
       const c = idx(iv + 1, iu)
       const d = idx(iv + 1, iu + 1)
+
+      // tapas (superior e inferior) de esta celda
       pushTri(topStart + a, topStart + b, topStart + c, [0, 1, 0])
       pushTri(topStart + b, topStart + d, topStart + c, [0, 1, 0])
       pushTri(botStart + a, botStart + b, botStart + c, [0, -1, 0])
       pushTri(botStart + b, botStart + d, botStart + c, [0, -1, 0])
-    }
-  }
 
-  // paredes laterales: 4 bordes del grid, cada uno conecta arriba con abajo
-  const addWall = (
-    steps: number,
-    at: (i: number) => { top: number; bot: number },
-    ref: [number, number, number],
-  ) => {
-    for (let i = 0; i < steps; i++) {
-      const p0 = at(i)
-      const p1 = at(i + 1)
-      pushTri(p0.top, p1.top, p0.bot, ref)
-      pushTri(p1.top, p1.bot, p0.bot, ref)
+      // pared en cada arista cuyo vecino no esta relleno
+      const cx = domain.minX + ((iu + 0.5) / nu) * width
+      const cz = domain.minZ + ((iv + 0.5) / nv) * height
+      const edges: [neighborIv: number, neighborIu: number, v0: number, v1: number][] = [
+        [iv - 1, iu, a, b], // arista "v-": comparte fila iv (a,b)
+        [iv + 1, iu, c, d], // arista "v+": comparte fila iv+1 (c,d)
+        [iv, iu - 1, a, c], // arista "u-": comparte columna iu (a,c)
+        [iv, iu + 1, b, d], // arista "u+": comparte columna iu+1 (b,d)
+      ]
+      for (const [nIv, nIu, v0, v1] of edges) {
+        if (isFilled(nIv, nIu)) continue
+        const t0 = topStart + v0
+        const t1 = topStart + v1
+        const b0 = botStart + v0
+        const b1 = botStart + v1
+        const midx = (vx(t0) + vx(t1)) / 2
+        const midz = (vz(t0) + vz(t1)) / 2
+        let refx = midx - cx
+        let refz = midz - cz
+        const len = Math.hypot(refx, refz) || 1
+        refx /= len
+        refz /= len
+        const ref: [number, number, number] = [refx, 0, refz]
+        pushTri(t0, t1, b0, ref)
+        pushTri(t1, b1, b0, ref)
+      }
     }
   }
-  addWall(
-    n,
-    (i) => ({ top: topStart + idx(0, i), bot: botStart + idx(0, i) }),
-    [0, 0, -1],
-  )
-  addWall(n, (i) => ({ top: topStart + idx(n, i), bot: botStart + idx(n, i) }), [0, 0, 1])
-  addWall(
-    n,
-    (i) => ({ top: topStart + idx(i, 0), bot: botStart + idx(i, 0) }),
-    [-1, 0, 0],
-  )
-  addWall(n, (i) => ({ top: topStart + idx(i, n), bot: botStart + idx(i, n) }), [1, 0, 0])
 
   return { positions, indices }
+}
+
+/** Caja envolvente SOLO de los vertices efectivamente indexados (usados). */
+function computeIndexedBounds(positions: number[], indices: number[]): THREE.Box3 {
+  const box = new THREE.Box3()
+  for (let i = 0; i < indices.length; i++) {
+    const o = indices[i] * 3
+    box.min.x = Math.min(box.min.x, positions[o])
+    box.min.y = Math.min(box.min.y, positions[o + 1])
+    box.min.z = Math.min(box.min.z, positions[o + 2])
+    box.max.x = Math.max(box.max.x, positions[o])
+    box.max.y = Math.max(box.max.y, positions[o + 1])
+    box.max.z = Math.max(box.max.z, positions[o + 2])
+  }
+  return box
 }
 
 const _p0 = new THREE.Vector3()

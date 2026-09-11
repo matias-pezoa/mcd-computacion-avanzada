@@ -19,6 +19,7 @@ import { mmToThree, threeToMm } from '../utils/units'
 import { buildSpike, spikeGeometry, SAFE_OVERHANG_DEG, MIN_GAP_MM } from './spike'
 import { sampleField } from './attractionField'
 import type { Attractor, CombineMode } from './attractionField'
+import { pointInBoundary, polygonBounds, type Boundary, type Vec2 } from './polygon'
 
 export interface SpikeFieldParams {
   /** Lado del panel cuadrado (u3d). Centrado en el origen, sobre y = 0. */
@@ -182,12 +183,14 @@ interface Footprint {
 export function buildSpikeField(
   attractors: readonly Attractor[],
   params: SpikeFieldParams,
+  boundary?: Boundary | null,
 ): SpikeFieldResult {
   const rng = mulberry32(params.seed)
   const gu = Math.max(1, Math.round(params.gridU))
   const gv = Math.max(1, Math.round(params.gridV))
   const maxOverhang = clamp(params.maxOverhangDeg, 0, SAFE_OVERHANG_DEG)
   const gap = mmToThree(Math.max(MIN_GAP_MM, params.gapMm))
+  const domain = resolveDomain(params.planeSize, boundary)
 
   const geoms: THREE.BufferGeometry[] = []
   const placed: Footprint[] = []
@@ -202,8 +205,9 @@ export function buildSpikeField(
     for (let iu = 0; iu < gu; iu++) {
       const u = clamp((iu + 0.5 + (rng() - 0.5) * params.jitter) / gu, 0, 1)
       const v = clamp((iv + 0.5 + (rng() - 0.5) * params.jitter) / gv, 0, 1)
-      const x = (u - 0.5) * params.planeSize
-      const z = (v - 0.5) * params.planeSize
+      const x = lerp(domain.minX, domain.maxX, u)
+      const z = lerp(domain.minZ, domain.maxZ, v)
+      if (!domain.test(x, z)) continue
       p.set(x, 0, z)
 
       const field = sampleField(p, attractors, params.combine)
@@ -276,6 +280,40 @@ export function buildSpikeField(
     rejectedByOverlap,
     limitedByStabilityCount,
     placements,
+  }
+}
+
+interface Domain {
+  minX: number
+  maxX: number
+  minZ: number
+  maxZ: number
+  /** true si (x,z) cae dentro del area sembrable. */
+  test: (x: number, z: number) => boolean
+}
+
+/**
+ * Sin `boundary`: el cuadrado `planeSize` de siempre (test siempre true).
+ * Con `boundary` (p. ej. una pieza de patron importada, en mm): su caja
+ * envolvente en unidades Three, y el test es "dentro del contorno externo y
+ * fuera de los agujeros".
+ */
+function resolveDomain(planeSize: number, boundary?: Boundary | null): Domain {
+  if (!boundary) {
+    const half = planeSize / 2
+    return { minX: -half, maxX: half, minZ: -half, maxZ: half, test: () => true }
+  }
+  const toThree = (pts: readonly Vec2[]): Vec2[] =>
+    pts.map(([x, z]) => [mmToThree(x), mmToThree(z)])
+  const outer = toThree(boundary.outer)
+  const holes = boundary.holes.map(toThree)
+  const b = polygonBounds(outer)
+  return {
+    minX: b.minX,
+    maxX: b.maxX,
+    minZ: b.minZ,
+    maxZ: b.maxZ,
+    test: (x, z) => pointInBoundary(x, z, { outer, holes }),
   }
 }
 

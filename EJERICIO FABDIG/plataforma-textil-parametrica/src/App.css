@@ -234,3 +234,24 @@ button.ghost {
   border-radius: 8px;
   padding: 10px;
 }
+
+.file-drop {
+  display: block;
+  width: 100%;
+  text-align: center;
+  background: var(--panel-2);
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  padding: 10px;
+  margin-bottom: 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.file-drop:hover {
+  border-color: var(--accent);
+}
+
+.hint.error {
+  color: #ff5d73;
+}

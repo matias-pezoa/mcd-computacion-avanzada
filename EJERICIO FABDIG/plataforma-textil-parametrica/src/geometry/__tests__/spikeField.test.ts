@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { buildSpikeField, DEFAULT_SPIKE_FIELD } from '../spikeField'
 import { SAFE_OVERHANG_DEG, MIN_ROOT_RADIUS_MM, MIN_TIP_RADIUS_MM } from '../spike'
 import { createAttractor } from '../attractionField'
+import type { Boundary } from '../polygon'
 
 const centerAttractor = () =>
   createAttractor(new THREE.Vector3(0, 4, 0), {
@@ -118,5 +119,42 @@ describe('buildSpikeField', () => {
     for (let i = 0; i < pos.array.length; i++)
       expect(Number.isFinite(pos.array[i])).toBe(true)
     expect(res.bounds.isEmpty()).toBe(false)
+  })
+
+  describe('con un contorno personalizado (base importada)', () => {
+    // triangulo rectangulo de 60x60mm: la mitad del cuadrado envolvente
+    const triangle: Boundary = {
+      outer: [
+        [-30, -30],
+        [30, -30],
+        [-30, 30],
+      ],
+      holes: [],
+    }
+
+    it('ninguna pua cae fuera del contorno', () => {
+      const res = buildSpikeField(
+        [centerAttractor()],
+        {
+          ...base,
+          densityMin: 1,
+          densityMax: 1,
+          jitter: 0, // sin jitter: el centro de cada celda es exacto y facil de chequear
+        },
+        triangle,
+      )
+      expect(res.count).toBeGreaterThan(0)
+      for (const p of res.placements) {
+        // dentro del triangulo x<=30, z<=30, x+z<=0 (hipotenusa de (30,-30) a (-30,30))
+        expect(p.x + p.z).toBeLessThanOrEqual(0 + 1e-6)
+      }
+    })
+
+    it('menos puas que en el cuadrado envolvente completo (misma grilla)', () => {
+      const params = { ...base, densityMin: 1, densityMax: 1, maxCount: 1000, gapMm: 0.1 }
+      const full = buildSpikeField([centerAttractor()], { ...params, planeSize: 6 })
+      const clipped = buildSpikeField([centerAttractor()], params, triangle)
+      expect(clipped.count).toBeLessThan(full.count)
+    })
   })
 })

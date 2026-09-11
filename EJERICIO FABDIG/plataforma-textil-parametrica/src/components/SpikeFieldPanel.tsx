@@ -4,6 +4,7 @@ import { useAppStore } from '../state/store'
 import type { FieldNumericKey } from '../state/store'
 import { ParamSlider } from './ParamSlider'
 import { AttractorEditor } from './AttractorEditor'
+import { BaseShapeImporter } from './BaseShapeImporter'
 import { FIELD_UI_PARAMS } from '../geometry/spikeField'
 import type { SpikeFieldResult } from '../geometry/spikeField'
 import {
@@ -13,7 +14,7 @@ import {
   SAFE_OVERHANG_DEG,
 } from '../geometry/spike'
 import { downloadStl } from '../io/exportSTL'
-import { threeToMm } from '../utils/units'
+import { mmToThree, threeToMm } from '../utils/units'
 
 interface SpikeFieldPanelProps {
   result: SpikeFieldResult
@@ -34,8 +35,10 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
   const removeAttractor = useAppStore((s) => s.removeAttractor)
+  const baseShape = useAppStore((s) => s.baseShape)
 
   const set = (key: FieldNumericKey) => (v: number) => setFieldParam(key, v)
+  const editorPlaneSize = baseShape ? mmToThree(baseShape.widthMm) : field.planeSize
 
   const sizeMm = result.bounds.isEmpty()
     ? [0, 0, 0]
@@ -64,18 +67,30 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
         </p>
       </section>
 
+      <BaseShapeImporter />
+
       <section>
         <h3>Base y distribucion</h3>
+        {baseShape && (
+          <p className="hint">
+            Usando la base importada ({baseShape.widthMm.toFixed(0)} x{' '}
+            {baseShape.heightMm.toFixed(0)} mm) en vez del panel cuadrado.
+          </p>
+        )}
         {FIELD_UI_PARAMS.filter(
-          pick([
-            'planeSize',
-            'gridU',
-            'gridV',
-            'densityMin',
-            'densityMax',
-            'jitter',
-            'maxCount',
-          ]),
+          pick(
+            baseShape
+              ? ['gridU', 'gridV', 'densityMin', 'densityMax', 'jitter', 'maxCount']
+              : [
+                  'planeSize',
+                  'gridU',
+                  'gridV',
+                  'densityMin',
+                  'densityMax',
+                  'jitter',
+                  'maxCount',
+                ],
+          ),
         ).map((p) => (
           <ParamSlider
             key={p.key}
@@ -125,7 +140,7 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
       <AttractorEditor
         attractors={attractors}
         selectedId={selectedId}
-        planeSize={field.planeSize}
+        planeSize={editorPlaneSize}
         onAdd={addAttractor}
         onSelect={selectAttractor}
         onUpdate={updateAttractor}

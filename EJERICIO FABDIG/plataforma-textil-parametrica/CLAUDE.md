@@ -90,15 +90,17 @@ Se agregan en la fase que las necesita, no antes:
 src/
   geometry/       # funciones puras (+ __tests__/):
                   #   printability    constantes de factibilidad compartidas (SAFE_OVERHANG_DEG)
+                  #   polygon         point-in-polygon, bounds, area, fit/rescale (base personalizada)
                   #   spike           una pua: cono truncado autosoportado
-                  #   spikeField      plano + atractores -> campo de puas sin solape
-                  #   waveField       plano + atractores -> panel corrugado facetado
+                  #   spikeField      plano/contorno + atractores -> campo de puas sin solape
+                  #   waveField       plano/contorno + atractores -> panel corrugado facetado
                   #   attractionField atractores + sampleField
   components/     # SpikeFieldScene/Panel, WaveFieldScene/Panel,
-                  #   AttractorGizmos (viewport) y AttractorEditor (panel) compartidos
-                  #   entre ambos modos 3D, ParamSlider
+                  #   AttractorGizmos (viewport), AttractorEditor (panel) y
+                  #   BaseShapeImporter/BaseShapeGround (base personalizada)
+                  #   compartidos entre ambos modos 3D, ParamSlider
   scene/          # Viewport (canvas R3F, luces, grid, OrbitControls)
-  io/             # exportSTL
+  io/             # exportSTL, importSvg (SVG -> contorno)
   state/          # store de zustand
   utils/          # units, params, random
 ```
@@ -199,6 +201,63 @@ discretas).
   el techo (y nunca al reves), techo absoluto respetado, sum >= max en
   solapes, limites de segmentos por eje, malla valida, determinismo. 10 casos.
 
+### Base personalizada (importar SVG) — COMPLETO
+Compartida entre Volumen y Ondas: reemplaza el panel cuadrado por un contorno
+importado (p. ej. una pieza de patron con pinzas), sin tocar la logica de
+atractores/campo de ninguno de los dos modos.
+
+- `geometry/polygon.ts`: `pointInPolygon`/`pointInBoundary` (ray casting, borde
+  externo menos agujeros), `polygonBounds`, `polygonArea`, `fitBoundaryToWidth`
+  (centra y escala TODOS los contornos con el mismo factor, a partir del ancho
+  real en mm que fija el usuario) y `rescaleBoundary` (para cuando el usuario
+  cambia ese ancho despues de importar).
+- `io/importSvg.ts`: `parseSvgToBoundary(svgText)` / `importSvgFile(file)`. NO
+  implementa matematica de curvas Bezier/arcos: monta el SVG oculto en el DOM y
+  usa las APIs nativas `getTotalLength()`/`getPointAtLength()` (soportan
+  `path`, `polygon`, `polyline`, `rect`, `circle`, `ellipse` con cualquier
+  curva) + `getCTM()` para resolver `<g transform>` anidados. El contorno de
+  mayor area es el borde externo; los demas (si caen dentro de su caja) son
+  agujeros. **Estas APIs no existen en jsdom/Node** — no son testeables con
+  vitest; se verificaron una vez a mano con Playwright apuntando al Chrome
+  instalado (`playwright-core` como devDependency temporal, desinstalada
+  despues — no forma parte del toolchain del proyecto). Si se vuelve a tocar
+  este archivo, repetir esa verificacion manual en un navegador real.
+- `state/store.ts`: `baseShape: BaseShapeState | null` (outer/holes en mm, YA
+  centrados/escalados, compartido — no hay uno por modo) + `setBaseShape`
+  (recibe el `ImportedBoundary` crudo y lo ajusta con `fitBoundaryToWidth`),
+  `setBaseShapeWidthMm` (reescala en caliente via `rescaleBoundary`),
+  `clearBaseShape` (vuelve al panel cuadrado).
+- `geometry/spikeField.ts` y `geometry/waveField.ts` reciben un 3er argumento
+  opcional `boundary?: Boundary | null`:
+  - Volumen: el dominio de muestreo pasa de la caja `[-planeSize/2,planeSize/2]`
+    al bounding box del contorno, y cada candidato se filtra con
+    `pointInBoundary` antes de gastar RNG en densidad/campo.
+  - Ondas: `buildSolidHeightfield` ya NO asume un rectangulo — enmascara CADA
+    CELDA de la grilla por su centro (`domain.test`) y, para cada celda
+    rellena, agrega una pared en cualquier arista cuyo vecino no este relleno
+    (fuera de grilla o fuera del contorno), calculando la direccion "hacia
+    afuera" de esa pared como el vector centro-celda -> punto medio de la
+    arista (no hace falta triangular el poligono exacto). El contorno queda
+    "a escalones" del tamano de la grilla — aceptable dado el estilo ya
+    faceteado del modo. Ojo: `geometry.computeBoundingBox()` de Three cuenta
+    TODOS los vertices del buffer, incluidos los de celdas fuera del contorno
+    (huerfanos, sin triangulo); las `bounds` que se reportan al usuario se
+    calculan aparte iterando el INDICE (`computeIndexedBounds`), no
+    `geometry.boundingBox`, o las "Dimensiones" mostradas quedarian infladas.
+- UI: `BaseShapeImporter` (input file oculto tras un boton, ancho real en mm,
+  stats, "Quitar base") en ambos paneles; `BaseShapeGround` (viewport) dibuja
+  el plano cuadrado de siempre o, si hay `baseShape`, un `THREE.Shape` (con
+  `.holes`) con la MISMA orientacion/escala que usan spikeField/waveField —
+  ver la nota de signo en el propio archivo (rotar un `Shape` con
+  `rotation=[-PI/2,0,0]` manda su Y local a -Z en mundo; se compensa
+  invirtiendo Z al construir el `Shape` para que coincida exacto con el
+  dominio de muestreo).
+- Tests: `polygon.test.ts` (point-in-polygon con/sin agujeros, bounds, area,
+  fit/rescale). `spikeField.test.ts`/`waveField.test.ts` ganaron un bloque
+  "con un contorno personalizado" (puas no salen del contorno, menos
+  triangulos/puas que el cuadrado completo, agujero reduce aun mas, contorno
+  no cuadrado da segmentsU != segmentsV, base sigue plana). 53 casos totales.
+
 ### Interaccion: por que no hay "clic en el plano para agregar atractor"
 Se probo y se saco: al arrastrar el gizmo de `TransformControls` (drei) para
 mover un atractor, el gizmo NO es un objeto de React Three Fiber con su propio
@@ -240,4 +299,12 @@ en el viewport, verificar primero que no reaparezca este problema.
 - `AttractorGizmos`/`AttractorEditor` son compartidos entre Volumen y Ondas;
   si se agrega un tercer modo con atractores (p. ej. algo en Corte laser),
   reusarlos en vez de duplicar.
+- Base personalizada: el contorno en Ondas queda "a escalones" (resolucion de
+  grilla, no el poligono exacto) — es aceptable ahora porque el modo ya es
+  faceteado a proposito, pero si algun dia se quiere un borde liso hace falta
+  una triangulacion real del poligono (ear clipping o similar), no solo
+  enmascarar celdas. En Volumen no aplica (las puas son piezas discretas).
+- Base personalizada: solo SVG (no DXF). Si se necesita DXF, lo mas simple es
+  pedirle al usuario que lo convierta a SVG primero (Illustrator/Inkscape/
+  LibreCAD lo hacen), no agregar un parser de DXF aca.
 - Deploy: `npm run build` -> `../../plataforma-parametrica/`; commit + push a `main`.

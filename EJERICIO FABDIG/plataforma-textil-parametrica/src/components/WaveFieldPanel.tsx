@@ -4,6 +4,7 @@ import { useAppStore } from '../state/store'
 import type { WaveNumericKey } from '../state/store'
 import { ParamSlider } from './ParamSlider'
 import { AttractorEditor } from './AttractorEditor'
+import { BaseShapeImporter } from './BaseShapeImporter'
 import {
   WAVE_UI_PARAMS,
   MIN_BASE_THICKNESS_MM,
@@ -12,7 +13,7 @@ import {
 import type { WaveFieldResult } from '../geometry/waveField'
 import { SAFE_OVERHANG_DEG } from '../geometry/printability'
 import { downloadStl } from '../io/exportSTL'
-import { threeToMm } from '../utils/units'
+import { mmToThree, threeToMm } from '../utils/units'
 
 interface WaveFieldPanelProps {
   result: WaveFieldResult
@@ -29,8 +30,10 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
   const selectAttractor = useAppStore((s) => s.selectWaveAttractor)
   const updateAttractor = useAppStore((s) => s.updateWaveAttractor)
   const removeAttractor = useAppStore((s) => s.removeWaveAttractor)
+  const baseShape = useAppStore((s) => s.baseShape)
 
   const set = (key: WaveNumericKey) => (v: number) => setWaveParam(key, v)
+  const editorPlaneSize = baseShape ? mmToThree(baseShape.widthMm) : wave.planeSize
 
   const sizeMm = result.bounds.isEmpty()
     ? [0, 0, 0]
@@ -53,9 +56,17 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
         </p>
       </section>
 
+      <BaseShapeImporter />
+
       <section>
         <h3>Panel y ondas</h3>
-        {WAVE_UI_PARAMS.map((p) => (
+        {baseShape && (
+          <p className="hint">
+            Usando la base importada ({baseShape.widthMm.toFixed(0)} x{' '}
+            {baseShape.heightMm.toFixed(0)} mm) en vez del panel cuadrado.
+          </p>
+        )}
+        {WAVE_UI_PARAMS.filter((p) => !baseShape || p.key !== 'planeSize').map((p) => (
           <ParamSlider
             key={p.key}
             param={p}
@@ -88,7 +99,7 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
       <AttractorEditor
         attractors={attractors}
         selectedId={selectedId}
-        planeSize={wave.planeSize}
+        planeSize={editorPlaneSize}
         onAdd={addAttractor}
         onSelect={selectAttractor}
         onUpdate={updateAttractor}
@@ -106,8 +117,10 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
             </dd>
           </div>
           <div>
-            <dt>Segmentos por eje</dt>
-            <dd>{result.segmentsPerAxis}</dd>
+            <dt>Segmentos (U x V)</dt>
+            <dd>
+              {result.segmentsU} x {result.segmentsV}
+            </dd>
           </div>
           <div>
             <dt>Triangulos</dt>

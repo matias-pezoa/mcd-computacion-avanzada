@@ -95,6 +95,29 @@ Mismo flujo de atractores que Volumen (botón "+ Agregar atractor", gizmo para
 arrastrar), pero con su propio set independiente — mover uno no afecta al otro
 modo.
 
+### Base personalizada: importar un patrón
+
+En ambos modos 3D, la sección **"Base personalizada"** del panel reemplaza el
+panel cuadrado por un **SVG importado** — por ejemplo, una pieza de patrón de
+moda (como las que exporta `patronmoda`, convertida a SVG).
+
+- Acepta `path`, `polygon`, `polyline`, `rect`, `circle`, `ellipse` — cualquier
+  curva, sin importar cuán compleja (usa las APIs nativas del navegador para
+  leerla, no una implementación propia de curvas Bézier).
+- El contorno cerrado de **mayor área** es el borde externo; un segundo
+  contorno cerrado dentro del primero se trata como **agujero** (p. ej. una
+  pinza) — las puas/costillas no se generan ahí.
+- El SVG puede estar en cualquier unidad: se recalibra con el campo **"Ancho
+  real (mm)"**, que fija el ancho físico de la pieza (el alto se ajusta
+  proporcionalmente).
+- La base importada es **compartida** entre Volumen y Ondas: se importa una
+  vez y se puede probar con cualquiera de los dos tratamientos.
+- "Quitar base personalizada" vuelve al panel cuadrado en cualquier momento.
+
+En el modo Ondas el contorno queda "a escalones" (según la resolución de la
+grilla, no como un trazo perfectamente liso) — es una limitación conocida y
+coherente con la estética ya facetada del modo.
+
 ### Modo Corte laser (2D) — en preparacion
 
 Trabajara solo desde el vector: cortes parametricos con distintas familias de

@@ -8,6 +8,8 @@ import { create } from 'zustand'
 import * as THREE from 'three'
 import { DEFAULT_SPIKE_FIELD, type SpikeFieldParams } from '../geometry/spikeField'
 import { DEFAULT_WAVE_FIELD, type WaveFieldParams } from '../geometry/waveField'
+import { fitBoundaryToWidth, rescaleBoundary, type Vec2 } from '../geometry/polygon'
+import type { ImportedBoundary } from '../io/importSvg'
 import {
   createAttractor,
   type Attractor,
@@ -22,8 +24,23 @@ export type FieldNumericKey = Exclude<keyof SpikeFieldParams, 'combine' | 'align
 /** Campos numericos de WaveFieldParams editables desde la UI. */
 export type WaveNumericKey = Exclude<keyof WaveFieldParams, 'combine'>
 
+/**
+ * Base personalizada importada (p. ej. una pieza de patron), compartida entre
+ * los modos 3D. `outer`/`holes` ya estan centrados en el origen y en mm.
+ */
+export interface BaseShapeState {
+  outer: Vec2[]
+  holes: Vec2[][]
+  widthMm: number
+  heightMm: number
+  fileName: string
+}
+
 export interface AppState {
   mode: AppMode
+
+  // --- Base personalizada (importada), compartida entre Volumen y Ondas ---
+  baseShape: BaseShapeState | null
 
   // --- Modo Volumen: campo de puas desde un plano ---
   field: SpikeFieldParams
@@ -52,6 +69,10 @@ export interface AppState {
   updateWaveAttractor: (id: string, patch: Partial<Omit<Attractor, 'id'>>) => void
   removeWaveAttractor: (id: string) => void
   selectWaveAttractor: (id: string | null) => void
+
+  setBaseShape: (imported: ImportedBoundary, widthMm: number, fileName: string) => void
+  setBaseShapeWidthMm: (widthMm: number) => void
+  clearBaseShape: () => void
 
   reset: () => void
 }
@@ -88,6 +109,7 @@ function initialWaveAttractors(): Attractor[] {
 
 export const useAppStore = create<AppState>((set) => ({
   mode: 'volume',
+  baseShape: null,
   field: { ...DEFAULT_SPIKE_FIELD },
   attractors: initialAttractors(),
   selectedAttractorId: null,
@@ -150,9 +172,41 @@ export const useAppStore = create<AppState>((set) => ({
 
   selectWaveAttractor: (selectedWaveAttractorId) => set({ selectedWaveAttractorId }),
 
+  setBaseShape: (imported, widthMm, fileName) => {
+    const fitted = fitBoundaryToWidth(imported.outer, imported.holes, widthMm)
+    set({
+      baseShape: {
+        outer: fitted.outer,
+        holes: fitted.holes,
+        widthMm: fitted.widthMm,
+        heightMm: fitted.heightMm,
+        fileName,
+      },
+    })
+  },
+
+  setBaseShapeWidthMm: (widthMm) =>
+    set((s) => {
+      if (!s.baseShape || widthMm <= 0) return s
+      const factor = widthMm / s.baseShape.widthMm
+      const scaled = rescaleBoundary(s.baseShape.outer, s.baseShape.holes, factor)
+      return {
+        baseShape: {
+          ...s.baseShape,
+          outer: scaled.outer,
+          holes: scaled.holes,
+          widthMm: s.baseShape.widthMm * factor,
+          heightMm: s.baseShape.heightMm * factor,
+        },
+      }
+    }),
+
+  clearBaseShape: () => set({ baseShape: null }),
+
   reset: () =>
     set({
       mode: 'volume',
+      baseShape: null,
       field: { ...DEFAULT_SPIKE_FIELD },
       attractors: initialAttractors(),
       selectedAttractorId: null,

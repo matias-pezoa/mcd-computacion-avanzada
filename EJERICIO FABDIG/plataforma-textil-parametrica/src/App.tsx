@@ -99,8 +99,12 @@ export default function App() {
 function useSpikeField() {
   const field = useAppStore((s) => s.field)
   const attractors = useAppStore((s) => s.attractors)
+  const baseShape = useAppStore((s) => s.baseShape)
 
-  const result = useMemo(() => buildSpikeField(attractors, field), [attractors, field])
+  const result = useMemo(
+    () => buildSpikeField(attractors, field, baseShape),
+    [attractors, field, baseShape],
+  )
   useDisposePrevious(result.geometry)
   return result
 }
@@ -108,8 +112,12 @@ function useSpikeField() {
 function useWaveFieldResult() {
   const wave = useAppStore((s) => s.wave)
   const attractors = useAppStore((s) => s.waveAttractors)
+  const baseShape = useAppStore((s) => s.baseShape)
 
-  const result = useMemo(() => buildWaveField(attractors, wave), [attractors, wave])
+  const result = useMemo(
+    () => buildWaveField(attractors, wave, baseShape),
+    [attractors, wave, baseShape],
+  )
   useDisposePrevious(result.geometry)
   return result
 }

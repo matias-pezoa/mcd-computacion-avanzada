@@ -3,7 +3,8 @@ import * as THREE from 'three'
 import { buildWaveField, DEFAULT_WAVE_FIELD } from '../waveField'
 import { SAFE_OVERHANG_DEG } from '../printability'
 import { createAttractor } from '../attractionField'
-import { mmToThree } from '../../utils/units'
+import { mmToThree, threeToMm } from '../../utils/units'
+import type { Boundary } from '../polygon'
 
 const base = { ...DEFAULT_WAVE_FIELD, planeSize: 20 }
 
@@ -19,8 +20,7 @@ describe('buildWaveField', () => {
   it('la mitad "de abajo" de la malla es siempre plana en y = 0', () => {
     const res = buildWaveField([centerAttractor()], base)
     const pos = res.geometry.getAttribute('position')
-    const row = res.segmentsPerAxis + 1
-    const topCount = row * row
+    const topCount = (res.segmentsU + 1) * (res.segmentsV + 1)
     for (let i = topCount; i < pos.count; i++) {
       expect(pos.getY(i)).toBeCloseTo(0, 6)
     }
@@ -86,9 +86,11 @@ describe('buildWaveField', () => {
 
   it('respeta el minimo y maximo de segmentos por eje', () => {
     const coarse = buildWaveField([], { ...base, wavelengthMm: 1000, facetsPerWave: 1 })
-    expect(coarse.segmentsPerAxis).toBeGreaterThanOrEqual(4)
+    expect(coarse.segmentsU).toBeGreaterThanOrEqual(4)
+    expect(coarse.segmentsV).toBeGreaterThanOrEqual(4)
     const fine = buildWaveField([], { ...base, wavelengthMm: 1, facetsPerWave: 16 })
-    expect(fine.segmentsPerAxis).toBeLessThanOrEqual(200)
+    expect(fine.segmentsU).toBeLessThanOrEqual(200)
+    expect(fine.segmentsV).toBeLessThanOrEqual(200)
   })
 
   it('genera una malla solida valida (indexada, sin NaN)', () => {
@@ -105,5 +107,85 @@ describe('buildWaveField', () => {
     const b = buildWaveField([centerAttractor()], base)
     expect(a.triangleCount).toBe(b.triangleCount)
     expect(a.bounds.max.y).toBeCloseTo(b.bounds.max.y, 9)
+  })
+
+  describe('con un contorno personalizado (base importada)', () => {
+    // rectangulo 80x60mm, mucho mas chico que el panel cuadrado por defecto
+    const rect: Boundary = {
+      outer: [
+        [-40, -30],
+        [40, -30],
+        [40, 30],
+        [-40, 30],
+      ],
+      holes: [],
+    }
+
+    it('recorta la malla al contorno: menos triangulos que el panel cuadrado completo', () => {
+      const square = buildWaveField([], base) // sin boundary, planeSize=20 (u3d=200mm)
+      const clipped = buildWaveField([], base, rect)
+      expect(clipped.triangleCount).toBeLessThan(square.triangleCount)
+    })
+
+    it('las dimensiones reportadas coinciden con el contorno, no con vertices huerfanos', () => {
+      const res = buildWaveField([], base, rect)
+      const sizeX = threeToMm(res.bounds.max.x - res.bounds.min.x)
+      const sizeZ = threeToMm(res.bounds.max.z - res.bounds.min.z)
+      // tolerancia de un par de celdas de grilla (el contorno "escalona" al
+      // resolverse en celdas, ver buildSolidHeightfield).
+      expect(sizeX).toBeGreaterThan(70)
+      expect(sizeX).toBeLessThanOrEqual(80 + 1e-6)
+      expect(sizeZ).toBeGreaterThan(50)
+      expect(sizeZ).toBeLessThanOrEqual(60 + 1e-6)
+    })
+
+    it('un agujero (p. ej. una pinza) reduce aun mas los triangulos', () => {
+      // resolucion mas fina que en los demas tests de este bloque, para que
+      // el agujero (20x20mm) quede resuelto por varias celdas de la grilla
+      // en vez de perderse entre los centros de celda muestreados.
+      const fine = { ...base, wavelengthMm: 20, facetsPerWave: 4 }
+      const withHole: Boundary = {
+        outer: rect.outer,
+        holes: [
+          [
+            [-10, -10],
+            [10, -10],
+            [10, 10],
+            [-10, 10],
+          ],
+        ],
+      }
+      const solid = buildWaveField([], fine, rect)
+      const holed = buildWaveField([], fine, withHole)
+      expect(holed.triangleCount).toBeLessThan(solid.triangleCount)
+    })
+
+    it('un contorno rectangular no cuadrado da segmentsU y segmentsV distintos', () => {
+      const tall: Boundary = {
+        outer: [
+          [-20, -60],
+          [20, -60],
+          [20, 60],
+          [-20, 60],
+        ],
+        holes: [],
+      }
+      const res = buildWaveField([], base, tall)
+      expect(res.segmentsV).toBeGreaterThan(res.segmentsU)
+    })
+
+    it('base plana en y=0 se mantiene aunque se use un contorno personalizado', () => {
+      const res = buildWaveField([centerAttractor()], base, rect)
+      expect(res.bounds.min.y).toBeCloseTo(0, 6)
+    })
+
+    it('malla valida (indexada, sin NaN) con contorno personalizado', () => {
+      const res = buildWaveField([centerAttractor()], base, rect)
+      expect(res.geometry.getIndex()).not.toBeNull()
+      const pos = res.geometry.getAttribute('position')
+      for (let i = 0; i < pos.array.length; i++)
+        expect(Number.isFinite(pos.array[i])).toBe(true)
+      expect(res.triangleCount).toBeGreaterThan(0)
+    })
   })
 })

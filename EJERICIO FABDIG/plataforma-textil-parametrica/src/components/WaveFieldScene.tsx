@@ -15,6 +15,7 @@ import * as THREE from 'three'
 import { Edges } from '@react-three/drei'
 import { useAppStore } from '../state/store'
 import { AttractorGizmos } from './AttractorGizmos'
+import { BaseShapeGround } from './BaseShapeGround'
 
 interface WaveFieldSceneProps {
   geometry: THREE.BufferGeometry
@@ -22,6 +23,7 @@ interface WaveFieldSceneProps {
 }
 
 export function WaveFieldScene({ geometry, planeSize }: WaveFieldSceneProps) {
+  const baseShape = useAppStore((s) => s.baseShape)
   const attractors = useAppStore((s) => s.waveAttractors)
   const selectedId = useAppStore((s) => s.selectedWaveAttractorId)
   const selectAttractor = useAppStore((s) => s.selectWaveAttractor)
@@ -30,14 +32,7 @@ export function WaveFieldScene({ geometry, planeSize }: WaveFieldSceneProps) {
   return (
     <group>
       {/* base de tela, apenas debajo del panel para que no compitan en el z-fight */}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.01, 0]} receiveShadow>
-        <planeGeometry args={[planeSize, planeSize, 1, 1]} />
-        <meshStandardMaterial color="#d8cdbf" roughness={0.95} metalness={0} />
-      </mesh>
-      <gridHelper
-        args={[planeSize, Math.max(2, Math.round(planeSize / 2)), '#b9ab97', '#c7bca6']}
-        position={[0, -0.008, 0]}
-      />
+      <BaseShapeGround planeSize={planeSize} baseShape={baseShape} y={-0.01} />
 
       {hasVerts(geometry) && (
         <mesh geometry={geometry} receiveShadow>
