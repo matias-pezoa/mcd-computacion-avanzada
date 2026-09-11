@@ -31,10 +31,23 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
 
   const attractors = useAppStore((s) => s.attractors)
   const selectedId = useAppStore((s) => s.selectedAttractorId)
+  const addAttractor = useAppStore((s) => s.addAttractor)
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
   const removeAttractor = useAppStore((s) => s.removeAttractor)
   const selected = attractors.find((a) => a.id === selectedId)
+
+  // posicion aleatoria dentro del panel: si se agregan varios de una, no
+  // quedan apilados exactamente uno sobre el otro. Se ajustan despues
+  // arrastrando el gizmo.
+  const addRandomAttractor = (planeSize: number) => {
+    const half = planeSize * 0.3
+    addAttractor([
+      (Math.random() * 2 - 1) * half,
+      3 + Math.random() * 2,
+      (Math.random() * 2 - 1) * half,
+    ])
+  }
 
   const set = (key: FieldNumericKey) => (v: number) => setFieldParam(key, v)
 
@@ -126,9 +139,12 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
       <section>
         <h3>Atractores ({attractors.length})</h3>
         <p className="hint">
-          Clic en la base (el plano) para agregar un atractor. Clic en una esfera roja
-          para seleccionarla y arrastrarla; su altura tambien influye.
+          Clic en una esfera roja para seleccionarla y arrastrarla con el gizmo (su altura
+          tambien influye en el campo).
         </p>
+        <button type="button" onClick={() => addRandomAttractor(field.planeSize)}>
+          + Agregar atractor
+        </button>
         <ul className="attractor-list">
           {attractors.map((a) => (
             <li key={a.id} className={a.id === selectedId ? 'active' : ''}>

@@ -5,7 +5,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import { TransformControls } from '@react-three/drei'
-import type { ThreeEvent } from '@react-three/fiber'
 import { useAppStore } from '../state/store'
 import type { Attractor } from '../geometry/attractionField'
 
@@ -17,7 +16,6 @@ interface SpikeFieldSceneProps {
 export function SpikeFieldScene({ geometry, planeSize }: SpikeFieldSceneProps) {
   const attractors = useAppStore((s) => s.attractors)
   const selectedId = useAppStore((s) => s.selectedAttractorId)
-  const addAttractor = useAppStore((s) => s.addAttractor)
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
 
@@ -29,17 +27,12 @@ export function SpikeFieldScene({ geometry, planeSize }: SpikeFieldSceneProps) {
 
   return (
     <group>
-      {/* base de tela */}
-      <mesh
-        rotation={[-Math.PI / 2, 0, 0]}
-        receiveShadow
-        onPointerDown={(e: ThreeEvent<PointerEvent>) => {
-          if (e.button !== 0) return
-          e.stopPropagation()
-          // click sobre el plano -> atractor un poco por encima
-          addAttractor([e.point.x, 3, e.point.z])
-        }}
-      >
+      {/* base de tela. Los atractores se agregan con el boton del panel, no
+          con clic aca: el gizmo de TransformControls no es un objeto de R3F
+          (no tiene onPointerDown propio), asi que un clic para arrastrarlo
+          "atravesaba" hasta este plano y sumaba un atractor de mas cada vez
+          que se intentaba mover uno existente. */}
+      <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <planeGeometry args={[planeSize, planeSize, 1, 1]} />
         <meshStandardMaterial color="#d8cdbf" roughness={0.95} metalness={0} />
       </mesh>

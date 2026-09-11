@@ -53,12 +53,19 @@ que una impresora FDM puede imprimir sin soporte:
   contacto real para adherirse a la tela.
 - **Sin solapes**: una pua candidata se descarta si su huella invade la de una
   ya colocada (el panel muestra cuantas se descartaron por esto).
+- **La base nunca se inclina**: la malla es un tronco de cono oblicuo — el
+  anillo de la base es siempre horizontal y queda fijo sobre el plano; solo el
+  anillo de la punta se desplaza. (Un cono recto simplemente rotado inclinaria
+  tambien su disco de base, despegandolo del plano de un lado.)
+
+Los atractores se agregan con el boton **"+ Agregar atractor"** del panel (no
+con clic en el viewport: el gizmo de arrastre no admite ese gesto sin
+producir un atractor de mas en cada intento de moverlo). Clic en una esfera
+roja la selecciona; el gizmo la arrastra.
 
 Ajustando `Caras` (en "Forma de la pua") de 3 a ~32 la pua pasa de piramide a
 prisma a cono liso — variedad de forma sin agregar parametros nuevos.
 
-- Clic en el plano agrega un atractor; clic en una esfera roja la selecciona y
-  permite arrastrarla (su altura tambien influye).
 - El panel ajusta la base y distribucion, la forma de la pua y cada atractor
   (radio, intensidad, tipo de caida).
 - "Descargar STL (mm)" exporta **todas las puas fusionadas** en un unico

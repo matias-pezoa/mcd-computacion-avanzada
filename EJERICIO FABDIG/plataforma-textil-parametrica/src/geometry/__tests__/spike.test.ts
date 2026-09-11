@@ -135,6 +135,42 @@ describe('buildSpike', () => {
     )
   })
 
+  it('la base de la malla queda siempre horizontal y centrada en spike.base, aunque la pua se incline', () => {
+    const s = buildSpike(base, new THREE.Vector2(1, 0.4), {
+      height: 1.5,
+      rootRadiusMm: 8,
+      tipRadiusMm: 1,
+      leanDeg: 30,
+      maxOverhangDeg: 45,
+    })
+    expect(s.leanDegApplied).toBeGreaterThan(0) // que realmente haya inclinacion que verificar
+    const n = 16
+    const geo = spikeGeometry(s, n)
+    const pos = geo.getAttribute('position')
+    // los primeros 2*n vertices son los anillos (base y punta intercalados,
+    // ver spikeGeometry); despues vienen los 2 centros de las tapas, que no
+    // son parte del anillo y se excluyen del recorrido. Los de la base
+    // (indices pares) deben tener y == base.y y quedar exactamente al radio
+    // de la base desde spike.base (en XZ).
+    for (let i = 0; i < 2 * n; i += 2) {
+      const y = pos.getY(i)
+      expect(y).toBeCloseTo(base.y, 6)
+      const dx = pos.getX(i) - base.x
+      const dz = pos.getZ(i) - base.z
+      expect(Math.hypot(dx, dz)).toBeCloseTo(s.rootRadius, 6)
+    }
+    // el anillo de la punta (indices impares) tambien es horizontal, pero
+    // centrado en spike.tip (que SI esta desplazado del centro de la base).
+    for (let i = 1; i < 2 * n; i += 2) {
+      expect(pos.getY(i)).toBeCloseTo(s.tip.y, 6)
+      const dx = pos.getX(i) - s.tip.x
+      const dz = pos.getZ(i) - s.tip.z
+      expect(Math.hypot(dx, dz)).toBeCloseTo(s.tipRadius, 6)
+    }
+    expect(Math.hypot(s.tip.x - base.x, s.tip.z - base.z)).toBeGreaterThan(0.01)
+    geo.dispose()
+  })
+
   it('spikeGeometry produce un solido cerrado, indexado y sin NaN', () => {
     const s = buildSpike(base, new THREE.Vector2(1, 1), {
       height: 2,

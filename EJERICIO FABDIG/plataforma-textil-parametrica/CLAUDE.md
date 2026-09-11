@@ -115,8 +115,10 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
   YA recortado al MENOR de dos techos — vuelo (`maxOverhangDeg`, tope absoluto
   `SAFE_OVERHANG_DEG`) y estabilidad (`atan2(rootRadius*BASE_STABILITY_FACTOR,
   height)`) — y `limitedByStability` indicando cual gano). `spikeGeometry`
-  construye el cono truncado (CylinderGeometry orientado + trasladado), solido
-  y cerrado. `segments` bajo (3-6) da piramides/prismas; alto da un cono liso.
+  arma un tronco de cono OBLICUO (no un cono recto rotado): el anillo de la
+  base y el de la punta son ambos HORIZONTALES, solo el centro de la punta se
+  desplaza — la base nunca se inclina ni se despega del plano en la malla.
+  `segments` bajo (3-6) da piramides/prismas; alto da un cono liso.
 - `geometry/attractionField.ts`: sin cambios — `Attractor`, `sampleField`.
 - `geometry/spikeField.ts`: `buildSpikeField(attractors, params)` — siembra
   puntos en el plano por densidad del campo (grilla + jitter, como antes);
@@ -127,17 +129,30 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
   (`geometry`), lista para exportar sin pasos adicionales. Determinista por
   seed, tope `maxCount`.
 - UI: `SpikeFieldScene` (base de tela + malla solida + gizmos de atractores;
-  clic en el plano agrega atractor, arrastre lo mueve) y `SpikeFieldPanel`
-  (seccion "Factibilidad de impresion" explicando AMBOS limites, base y
-  distribucion, forma de la pua, atractores, export STL + stats: descartadas
-  por solape y limitadas por estabilidad de base).
+  **NO hay clic-para-agregar en el plano** — ver nota de interaccion abajo,
+  arrastre del gizmo mueve el seleccionado) y `SpikeFieldPanel` (seccion
+  "Factibilidad de impresion" explicando AMBOS limites, base y distribucion,
+  forma de la pua, boton "+ Agregar atractor", lista de atractores, export
+  STL + stats: descartadas por solape y limitadas por estabilidad de base).
 - Tests: `spike.test.ts` (angulo constante en toda la longitud, pisos de radio,
   techo `SAFE_OVERHANG_DEG` defensivo, malla solida sin NaN, pua alta/angosta
   se inclina menos que una baja/ancha, deriva horizontal nunca supera
-  `rootRadius * BASE_STABILITY_FACTOR`), `spikeField.test.ts` (determinismo,
-  densidad vs atractor, maxCount, CERO solapes entre pares, pisos de
-  fabricacion respetados, `limitedByStabilityCount` coincide con los
-  placements marcados), `attractionField.test.ts`. 23 casos.
+  `rootRadius * BASE_STABILITY_FACTOR`, **anillo de la base siempre horizontal
+  y centrado en `spike.base` aunque la pua se incline**), `spikeField.test.ts`
+  (determinismo, densidad vs atractor, maxCount, CERO solapes entre pares,
+  pisos de fabricacion respetados, `limitedByStabilityCount` coincide con los
+  placements marcados), `attractionField.test.ts`. 24 casos.
+
+### Interaccion: por que no hay "clic en el plano para agregar atractor"
+Se probo y se saco: al arrastrar el gizmo de `TransformControls` (drei) para
+mover un atractor, el gizmo NO es un objeto de React Three Fiber con su propio
+`onPointerDown` — R3F no encuentra un handler en el, sigue el rayo y dispara el
+`onPointerDown` del plano que esta detras, sumando un atractor nuevo en cada
+intento de arrastre. La solucion no es un `stopPropagation` (no hay donde
+ponerlo) sino eliminar el gesto: agregar atractores es SOLO el boton
+"+ Agregar atractor" del panel (posicion aleatoria dentro del panel; se ajusta
+despues arrastrando el gizmo). Si se reintroduce alguna vez un gesto de clic
+en el viewport, verificar primero que no reaparezca este problema.
 
 ### Pendiente / notas para retomar
 - **Modo Corte laser** (siguiente): 2D puro. Familias parametricas — empezar por

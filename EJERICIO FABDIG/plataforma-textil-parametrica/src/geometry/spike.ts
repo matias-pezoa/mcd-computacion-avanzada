@@ -33,6 +33,16 @@
  * Es ademas un solido cerrado (tapas incluidas): sin paredes delgadas que
  * dependan de normales para no verse como una lamina de espesor cero.
  *
+ * Importante sobre la malla: la base NUNCA se inclina. Un corte FDM apila
+ * capas HORIZONTALES sin importar cuanto "se incline" la pieza a simple
+ * vista, asi que el solido se arma como un tronco de cono oblicuo: el anillo
+ * de la base y el anillo de la punta son ambos horizontales (paralelos al
+ * plano) y solo el CENTRO del anillo de la punta se desplaza lateralmente.
+ * Si en cambio se rotara un cono recto de forma rigida (como se hizo en un
+ * primer intento), el disco de la base tambien quedaria inclinado —
+ * despegado del plano de un lado y hundido del otro — que es exactamente el
+ * problema de adherencia que este modulo existe para evitar.
+ *
  * Funcion pura.
  */
 import * as THREE from 'three'
@@ -174,13 +184,15 @@ export interface SpikeParams {
 }
 
 export interface Spike {
+  /** Centro del anillo de la base. SIEMPRE horizontal, nunca se inclina. */
   base: THREE.Vector3
+  /** Centro del anillo de la punta. SIEMPRE horizontal; es el que se desplaza. */
   tip: THREE.Vector3
-  /** Vector unitario de base a punta. */
+  /** Vector unitario de base a punta. Solo descriptivo (ver nota de arriba). */
   axis: THREE.Vector3
   rootRadius: number
   tipRadius: number
-  /** Longitud del eje (base a punta), en unidades Three. */
+  /** Distancia recta de base a punta, en unidades Three. Solo descriptivo. */
   axisLength: number
   /** Radio conservador del area que ocupa sobre el plano (para evitar solapes). */
   footprintRadius: number
@@ -249,19 +261,83 @@ export function buildSpike(
   }
 }
 
-/** Malla solida y cerrada (cono truncado) de una pua ya calculada. */
+/**
+ * Malla solida y cerrada (tronco de cono OBLICUO) de una pua ya calculada.
+ * El anillo de la base y el de la punta son ambos horizontales; solo el
+ * centro de la punta esta desplazado del centro de la base. La base nunca
+ * se inclina (ver nota al inicio del archivo).
+ */
 export function spikeGeometry(spike: Spike, segments: number): THREE.BufferGeometry {
-  const geo = new THREE.CylinderGeometry(
-    spike.tipRadius,
-    spike.rootRadius,
-    spike.axisLength,
-    Math.max(3, Math.round(segments)),
-    1,
-    false,
-  )
-  const quat = new THREE.Quaternion().setFromUnitVectors(UP, spike.axis)
-  geo.applyQuaternion(quat)
-  const mid = spike.base.clone().addScaledVector(spike.axis, spike.axisLength / 2)
-  geo.translate(mid.x, mid.y, mid.z)
+  const n = Math.max(3, Math.round(segments))
+
+  // eje horizontal estable en la direccion de la deriva (o uno fijo si no
+  // hay deriva); ambos anillos usan el MISMO par de ejes para que sus
+  // vertices queden alineados radialmente (caras laterales planas).
+  const driftX = spike.tip.x - spike.base.x
+  const driftZ = spike.tip.z - spike.base.z
+  const driftLen = Math.hypot(driftX, driftZ)
+  const ex = driftLen > 1e-8 ? driftX / driftLen : 1
+  const ez = driftLen > 1e-8 ? driftZ / driftLen : 0
+  const fx = -ez // perpendicular horizontal a (ex, ez)
+  const fz = ex
+
+  const positions: number[] = []
+  const baseRing: number[] = []
+  const tipRing: number[] = []
+
+  for (let i = 0; i < n; i++) {
+    const a = (i / n) * Math.PI * 2
+    const c = Math.cos(a)
+    const s = Math.sin(a)
+    const ox = c * ex + s * fx
+    const oz = c * ez + s * fz
+
+    baseRing.push(positions.length / 3)
+    positions.push(
+      spike.base.x + spike.rootRadius * ox,
+      spike.base.y,
+      spike.base.z + spike.rootRadius * oz,
+    )
+
+    tipRing.push(positions.length / 3)
+    positions.push(
+      spike.tip.x + spike.tipRadius * ox,
+      spike.tip.y,
+      spike.tip.z + spike.tipRadius * oz,
+    )
+  }
+
+  const indices: number[] = []
+
+  // caras laterales
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    const b0 = baseRing[i]
+    const b1 = baseRing[j]
+    const t0 = tipRing[i]
+    const t1 = tipRing[j]
+    indices.push(b0, b1, t1, b0, t1, t0)
+  }
+
+  // tapa de la base, mirando hacia abajo
+  const baseCenterIdx = positions.length / 3
+  positions.push(spike.base.x, spike.base.y, spike.base.z)
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    indices.push(baseCenterIdx, baseRing[j], baseRing[i])
+  }
+
+  // tapa de la punta, mirando hacia arriba
+  const tipCenterIdx = positions.length / 3
+  positions.push(spike.tip.x, spike.tip.y, spike.tip.z)
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n
+    indices.push(tipCenterIdx, tipRing[i], tipRing[j])
+  }
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
   return geo
 }
