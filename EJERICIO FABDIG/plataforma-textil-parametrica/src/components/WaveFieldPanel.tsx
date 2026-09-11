@@ -56,7 +56,9 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
           tener voladizo real (son paredes casi verticales, el perfil solo sube y
           baja dentro de la pared) no hace falta recortar la amplitud por angulo —
           el riesgo en este modo es la esbeltez (costillas muy altas y finas pueden
-          vibrar o desprenderse), reportada abajo.
+          vibrar o desprenderse), reportada abajo. Con "Altura minima (valle)" en 0,
+          las zonas sin influencia de ningun atractor quedan directamente vacias (sin
+          material) en vez de mostrar una costilla plana.
         </p>
       </section>
 
@@ -125,7 +127,7 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
             <dd>
               {result.ribCount}
               {result.segmentCount !== result.ribCount
-                ? ` (${result.segmentCount} piezas, algunas partidas por el contorno)`
+                ? ` (${result.segmentCount} piezas: algunas partidas o vacias por el contorno o la altura minima)`
                 : ''}
             </dd>
           </div>

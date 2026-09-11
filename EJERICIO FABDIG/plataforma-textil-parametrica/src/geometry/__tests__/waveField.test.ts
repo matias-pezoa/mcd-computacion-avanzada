@@ -60,8 +60,26 @@ describe('buildWaveField', () => {
     expect(res.appliedRibThicknessMm).toBeCloseTo(1, 6)
   })
 
-  it('la altura minima de costilla nunca baja del piso de fabricacion', () => {
+  it('con altura piso >= minimo imprimible, cada costilla es un solo tramo continuo (sin huecos)', () => {
+    const res = buildWaveField([centerAttractor()], base) // heightFloorMm default = 3 >= MIN_RIB_HEIGHT_MM
+    expect(res.segmentCount).toBe(res.ribCount)
+  })
+
+  it('con altura piso en 0 y sin atractores, no se genera ninguna costilla (todo vacio)', () => {
     const res = buildWaveField([], { ...base, heightFloorMm: 0 })
+    expect(res.segmentCount).toBe(0)
+    expect(res.triangleCount).toBe(0)
+  })
+
+  it('con altura piso en 0, las costillas lejos de todo atractor quedan vacias (huecos reales)', () => {
+    const near = createAttractor(new THREE.Vector3(0, 3, 0), {
+      radius: 3, // u3d = 30mm, chico frente al panel de 200mm
+      strength: 1,
+      falloff: 'linear',
+    })
+    const res = buildWaveField([near], { ...base, heightFloorMm: 0, spacingMm: 10 })
+    expect(res.segmentCount).toBeGreaterThan(0)
+    expect(res.segmentCount).toBeLessThan(res.ribCount)
     expect(threeToMm(res.bounds.max.y)).toBeGreaterThanOrEqual(MIN_RIB_HEIGHT_MM - 1e-6)
   })
 

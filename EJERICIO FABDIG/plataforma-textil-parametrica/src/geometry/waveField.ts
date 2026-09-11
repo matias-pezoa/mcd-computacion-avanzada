@@ -18,9 +18,14 @@
  * Volumen usa para atraer (`attractionField.falloff`, combinada por atractor
  * como un circulo concentrico que se aleja de una piedra tirada al agua), y
  * esa altura se extruye como un solido delgado (espesor `ribThicknessMm`)
- * de seccion "cerca de tierra". Una costilla nunca baja de una altura piso
+ * de seccion "cerca de tierra". Una costilla no baja de una altura piso
  * (`heightFloorMm`): en zonas sin influencia de ningun atractor sigue
- * siendo un diente visible del peine, no desaparece.
+ * siendo un diente visible del peine. Si se pone `heightFloorMm` en 0, esa
+ * garantia desaparece a proposito: donde la altura pedida (piso + campo) cae
+ * por debajo del minimo imprimible (`MIN_RIB_HEIGHT_MM`) directamente NO se
+ * genera material ahi — la costilla se corta y deja un hueco real, el mismo
+ * mecanismo que usa el contorno del panel para partir costillas en tramos
+ * (ver mas abajo).
  *
  * Si el contorno del panel (una base importada, con agujeros) corta una
  * costilla en tramos separados, cada tramo se emite como su propio solido
@@ -36,8 +41,9 @@
  * (`MIN_RIB_THICKNESS_MM`, ~2 perimetros de una boquilla de 0.4mm),
  * separacion minima entre costillas vecinas para que no se toquen
  * (`MIN_SPACING_MM` + un margen fijo `RIB_GAP_MM`, que recorta el espesor
- * pedido si no entra) y una altura piso (`MIN_RIB_HEIGHT_MM`) para que
- * ninguna costilla se adelgace hasta desaparecer. Ademas se reporta la
+ * pedido si no entra) y una altura minima imprimible (`MIN_RIB_HEIGHT_MM`):
+ * por debajo de eso no se afina la costilla hasta un hilo, se corta y queda
+ * vacio (ver `heightFloorMm` arriba). Ademas se reporta la
  * esbeltez maxima (altura / espesor) como aviso: costillas muy altas y
  * finas pueden vibrar o desprenderse durante la impresion aunque cada corte
  * sea imprimible.
@@ -59,7 +65,12 @@ export const MIN_RIB_THICKNESS_MM = 0.8
 export const MIN_SPACING_MM = 2
 /** Margen de aire fijo entre las caras de dos costillas vecinas, en mm. */
 export const RIB_GAP_MM = 0.6
-/** Piso de altura de costilla (aun sin influencia de ningun atractor), en mm. */
+/**
+ * Altura minima imprimible de una costilla, en mm. No es un piso que se le
+ * imponga a `heightFloorMm` (ese puede ser 0) — es el umbral por debajo del
+ * cual una costilla directamente no se genera ahi (queda vacio) en vez de
+ * afinarse hasta un hilo imposible de imprimir.
+ */
 export const MIN_RIB_HEIGHT_MM = 1
 /** Piso de longitud de onda, en mm (que la ondulacion no sea mas fina que un par de lineas). */
 export const MIN_WAVELENGTH_MM = 4
@@ -71,7 +82,10 @@ export interface WaveFieldParams {
   spacingMm: number
   /** Espesor pedido de cada costilla (se recorta si no entra en `spacingMm`, ver arriba). */
   ribThicknessMm: number
-  /** Altura minima de costilla, incluso sin influencia de atractores. */
+  /**
+   * Altura minima de costilla, incluso sin influencia de atractores. En 0:
+   * sin atractores cerca, esa zona del panel queda vacia (ver arriba).
+   */
   heightFloorMm: number
   /** Amplitud pedida de las crestas, por encima de la altura piso. */
   amplitudeMm: number
@@ -124,7 +138,7 @@ export const WAVE_UI_PARAMS: readonly NumberParam[] = [
   {
     key: 'heightFloorMm',
     label: 'Altura minima (valle)',
-    min: MIN_RIB_HEIGHT_MM,
+    min: 0,
     max: 30,
     step: 0.5,
     default: 3,
@@ -193,10 +207,11 @@ export function buildWaveField(
     mmToThree(MIN_RIB_THICKNESS_MM),
     Math.min(requestedThickness, spacing - gap),
   )
-  const heightFloor = mmToThree(Math.max(MIN_RIB_HEIGHT_MM, params.heightFloorMm))
+  const heightFloor = mmToThree(Math.max(0, params.heightFloorMm))
   const amplitude = mmToThree(Math.max(0, params.amplitudeMm))
   const wavelength = mmToThree(Math.max(MIN_WAVELENGTH_MM, params.wavelengthMm))
   const facets = Math.max(2, Math.round(params.facetsPerWave))
+  const materialThreshold = mmToThree(MIN_RIB_HEIGHT_MM)
 
   const domain = resolveDomain(params.planeSize, boundary)
   const width = domain.maxX - domain.minX
@@ -210,6 +225,9 @@ export function buildWaveField(
 
   const heightAt = (x: number, z: number): number =>
     heightFloor + rippleHeight(x, z, attractors, params.combine, wavelength) * amplitude
+  // sin material (hueco) si la altura pedida ahi no llega al minimo imprimible.
+  const hasMaterial = (x: number, z: number): boolean =>
+    domain.test(x, z) && heightAt(x, z) >= materialThreshold
 
   const geoms: THREE.BufferGeometry[] = []
   let segmentCount = 0
@@ -217,7 +235,7 @@ export function buildWaveField(
 
   for (let i = 0; i < ribCount; i++) {
     const x = ribCount > 1 ? domain.minX + i * effectiveSpacing : (domain.minX + domain.maxX) / 2
-    for (const run of insideRuns(domain, x, sampleCount)) {
+    for (const run of insideRuns(hasMaterial, domain.minZ, height, x, sampleCount)) {
       const zs: number[] = []
       const hs: number[] = []
       for (let s = run.start; s <= run.end; s++) {
@@ -324,16 +342,23 @@ interface Run {
 
 /**
  * Tramos de muestras (indices [0, sampleCount] a lo largo de Z) donde el eje
- * `x` de una costilla cae dentro del dominio. Un contorno no convexo (p. ej.
- * un agujero) puede partir una costilla en varios tramos disjuntos; cada uno
- * se devuelve por separado para emitirse como su propio solido cerrado.
+ * `x` de una costilla tiene material segun `hasMaterial` (dentro del
+ * contorno del panel Y con altura suficiente para imprimirse). Tanto un
+ * contorno no convexo (p. ej. un agujero) como una altura piso en 0 pueden
+ * partir una costilla en varios tramos disjuntos; cada uno se devuelve por
+ * separado para emitirse como su propio solido cerrado.
  */
-function insideRuns(domain: Domain, x: number, sampleCount: number): Run[] {
-  const height = domain.maxZ - domain.minZ
+function insideRuns(
+  hasMaterial: (x: number, z: number) => boolean,
+  minZ: number,
+  spanZ: number,
+  x: number,
+  sampleCount: number,
+): Run[] {
   const inside: boolean[] = []
   for (let s = 0; s <= sampleCount; s++) {
-    const z = domain.minZ + (s / sampleCount) * height
-    inside.push(domain.test(x, z))
+    const z = minZ + (s / sampleCount) * spanZ
+    inside.push(hasMaterial(x, z))
   }
   const runs: Run[] = []
   let start = -1
