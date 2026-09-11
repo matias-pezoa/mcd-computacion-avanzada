@@ -1,6 +1,6 @@
 /**
- * Escena del modo Volumen: base de tela (plano) + campo de plumas que emergen
- * de ella + gizmos de atractores editables en el viewport.
+ * Escena del modo Volumen: base de tela (plano) + campo de puas solidas que
+ * emergen de ella + gizmos de atractores editables en el viewport.
  */
 import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
@@ -9,13 +9,12 @@ import type { ThreeEvent } from '@react-three/fiber'
 import { useAppStore } from '../state/store'
 import type { Attractor } from '../geometry/attractionField'
 
-interface FeatherFieldSceneProps {
-  blades: THREE.BufferGeometry
-  ribs: THREE.BufferGeometry | null
+interface SpikeFieldSceneProps {
+  geometry: THREE.BufferGeometry
   planeSize: number
 }
 
-export function FeatherFieldScene({ blades, ribs, planeSize }: FeatherFieldSceneProps) {
+export function SpikeFieldScene({ geometry, planeSize }: SpikeFieldSceneProps) {
   const attractors = useAppStore((s) => s.attractors)
   const selectedId = useAppStore((s) => s.selectedAttractorId)
   const addAttractor = useAppStore((s) => s.addAttractor)
@@ -24,7 +23,9 @@ export function FeatherFieldScene({ blades, ribs, planeSize }: FeatherFieldScene
 
   const handleRefs = useRef<Record<string, THREE.Mesh | null>>({})
   const selected = attractors.find((a) => a.id === selectedId)
-  const selectedObject = selected ? (handleRefs.current[selected.id] ?? undefined) : undefined
+  const selectedObject = selected
+    ? (handleRefs.current[selected.id] ?? undefined)
+    : undefined
 
   return (
     <group>
@@ -47,23 +48,9 @@ export function FeatherFieldScene({ blades, ribs, planeSize }: FeatherFieldScene
         position={[0, 0.002, 0]}
       />
 
-      {hasVerts(blades) && (
-        <mesh geometry={blades} castShadow>
-          <meshStandardMaterial
-            color="#f1ece0"
-            roughness={0.4}
-            metalness={0}
-            side={THREE.DoubleSide}
-            transparent
-            opacity={0.72}
-            depthWrite={false}
-          />
-        </mesh>
-      )}
-
-      {ribs && hasVerts(ribs) && (
-        <mesh geometry={ribs} castShadow>
-          <meshStandardMaterial color="#8a8158" roughness={0.5} metalness={0.05} />
+      {hasVerts(geometry) && (
+        <mesh geometry={geometry} castShadow receiveShadow>
+          <meshStandardMaterial color="#e7e2d6" roughness={0.45} metalness={0.05} />
         </mesh>
       )}
 

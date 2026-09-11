@@ -1,6 +1,6 @@
 /**
  * Viewport 3D compartido: Canvas de R3F, camara, luces, grid y controles de
- * orbita. Los modulos (loft, campo) se montan como children.
+ * orbita. Los modulos (campo de puas, corte laser) se montan como children.
  */
 import { Canvas } from '@react-three/fiber'
 import { Grid, OrbitControls } from '@react-three/drei'

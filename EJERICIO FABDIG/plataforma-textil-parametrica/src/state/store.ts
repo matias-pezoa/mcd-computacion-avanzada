@@ -6,11 +6,7 @@
  */
 import { create } from 'zustand'
 import * as THREE from 'three'
-import type { ProfileParams } from '../geometry/profile'
-import {
-  DEFAULT_FEATHER_FIELD,
-  type FeatherFieldParams,
-} from '../geometry/featherField'
+import { DEFAULT_SPIKE_FIELD, type SpikeFieldParams } from '../geometry/spikeField'
 import {
   createAttractor,
   type Attractor,
@@ -20,27 +16,22 @@ import {
 
 export type AppMode = 'volume' | 'laser'
 
-/** Campos numericos de FeatherFieldParams editables desde la UI. */
-export type FieldNumericKey = Exclude<
-  keyof FeatherFieldParams,
-  'combine' | 'alignToField' | 'rib' | 'profile'
->
+/** Campos numericos de SpikeFieldParams editables desde la UI. */
+export type FieldNumericKey = Exclude<keyof SpikeFieldParams, 'combine' | 'alignToField'>
 
 export interface AppState {
   mode: AppMode
 
-  // --- Modo Volumen: campo de plumas desde un plano ---
-  field: FeatherFieldParams
+  // --- Modo Volumen: campo de puas desde un plano ---
+  field: SpikeFieldParams
   attractors: Attractor[]
   selectedAttractorId: string | null
 
   // acciones
   setMode: (m: AppMode) => void
   setFieldParam: (key: FieldNumericKey, value: number) => void
-  setProfileParam: (key: keyof ProfileParams, value: number) => void
   setCombine: (mode: CombineMode) => void
   toggleAlignToField: () => void
-  toggleRib: () => void
 
   addAttractor: (position: [number, number, number]) => void
   updateAttractor: (id: string, patch: Partial<Omit<Attractor, 'id'>>) => void
@@ -52,21 +43,22 @@ export interface AppState {
 
 function initialAttractors(): Attractor[] {
   return [
-    createAttractor(new THREE.Vector3(0, 5, 2), { radius: 12, strength: 1, falloff: 'gaussian' }),
-    createAttractor(new THREE.Vector3(-9, 3, -7), { radius: 8, strength: 0.65, falloff: 'linear' }),
+    createAttractor(new THREE.Vector3(0, 5, 2), {
+      radius: 12,
+      strength: 1,
+      falloff: 'gaussian',
+    }),
+    createAttractor(new THREE.Vector3(-9, 3, -7), {
+      radius: 8,
+      strength: 0.65,
+      falloff: 'linear',
+    }),
   ]
-}
-
-function initialField(): FeatherFieldParams {
-  return {
-    ...DEFAULT_FEATHER_FIELD,
-    profile: { ...DEFAULT_FEATHER_FIELD.profile },
-  }
 }
 
 export const useAppStore = create<AppState>((set) => ({
   mode: 'volume',
-  field: initialField(),
+  field: { ...DEFAULT_SPIKE_FIELD },
   attractors: initialAttractors(),
   selectedAttractorId: null,
 
@@ -74,15 +66,10 @@ export const useAppStore = create<AppState>((set) => ({
 
   setFieldParam: (key, value) => set((s) => ({ field: { ...s.field, [key]: value } })),
 
-  setProfileParam: (key, value) =>
-    set((s) => ({ field: { ...s.field, profile: { ...s.field.profile, [key]: value } } })),
-
   setCombine: (combine) => set((s) => ({ field: { ...s.field, combine } })),
 
   toggleAlignToField: () =>
     set((s) => ({ field: { ...s.field, alignToField: !s.field.alignToField } })),
-
-  toggleRib: () => set((s) => ({ field: { ...s.field, rib: !s.field.rib } })),
 
   addAttractor: (position) =>
     set((s) => {
@@ -106,7 +93,7 @@ export const useAppStore = create<AppState>((set) => ({
   reset: () =>
     set({
       mode: 'volume',
-      field: initialField(),
+      field: { ...DEFAULT_SPIKE_FIELD },
       attractors: initialAttractors(),
       selectedAttractorId: null,
     }),

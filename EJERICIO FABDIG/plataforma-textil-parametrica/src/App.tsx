@@ -7,10 +7,10 @@ import { useEffect, useMemo, useRef } from 'react'
 import * as THREE from 'three'
 import './App.css'
 import { Viewport } from './scene/Viewport'
-import { FeatherFieldScene } from './components/FeatherFieldScene'
-import { FeatherFieldPanel } from './components/FeatherFieldPanel'
+import { SpikeFieldScene } from './components/SpikeFieldScene'
+import { SpikeFieldPanel } from './components/SpikeFieldPanel'
 import { useAppStore } from './state/store'
-import { buildFeatherField } from './geometry/featherField'
+import { buildSpikeField } from './geometry/spikeField'
 
 export default function App() {
   const mode = useAppStore((s) => s.mode)
@@ -18,7 +18,7 @@ export default function App() {
   const reset = useAppStore((s) => s.reset)
   const planeSize = useAppStore((s) => s.field.planeSize)
 
-  const feather = useFeatherField()
+  const spikes = useSpikeField()
 
   return (
     <div className="app">
@@ -48,15 +48,15 @@ export default function App() {
         </header>
 
         {mode === 'volume' ? (
-          <FeatherFieldPanel result={feather} />
+          <SpikeFieldPanel result={spikes} />
         ) : (
           <div className="panel">
             <section>
               <h3>Corte laser — proxima entrega</h3>
               <p className="hint">
                 Este modo trabajara solo desde el vector: cortes parametricos con
-                distintas familias de geometria (huella de las plumas, retícula
-                auxetica, escamas) y export SVG/DXF.
+                distintas familias de geometria (huella de las puas, retícula auxetica,
+                escamas) y export SVG/DXF.
               </p>
             </section>
           </div>
@@ -66,12 +66,12 @@ export default function App() {
       <main className="viewport">
         <Viewport>
           {mode === 'volume' && (
-            <FeatherFieldScene blades={feather.blades} ribs={feather.ribs} planeSize={planeSize} />
+            <SpikeFieldScene geometry={spikes.geometry} planeSize={planeSize} />
           )}
         </Viewport>
         <p className="note">
           {mode === 'volume'
-            ? 'Plumas que emergen del plano (base de tela). Altura, ancho, curvatura y densidad segun el mapa de atractores. 1 u = 1 cm.'
+            ? 'Puas solidas y autosoportadas que emergen del plano (base de tela), sin solape entre si. Altura, radios, inclinacion y densidad segun el mapa de atractores. 1 u = 1 cm.'
             : 'Modo de corte laser en preparacion.'}
         </p>
       </main>
@@ -79,14 +79,12 @@ export default function App() {
   )
 }
 
-function useFeatherField() {
+function useSpikeField() {
   const field = useAppStore((s) => s.field)
   const attractors = useAppStore((s) => s.attractors)
 
-  const result = useMemo(() => buildFeatherField(attractors, field), [attractors, field])
-
-  useDisposePrevious(result.blades)
-  useDisposePrevious(result.ribs)
+  const result = useMemo(() => buildSpikeField(attractors, field), [attractors, field])
+  useDisposePrevious(result.geometry)
   return result
 }
 

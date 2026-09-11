@@ -1,7 +1,12 @@
 # Guia por fases — Plataforma de Modelado Parametrico Textil
 
 > Copia de referencia de la guia original (`guia-plataforma-parametrica.md`).
-> El estado real de avance vive en `CLAUDE.md` › "Estado del proyecto".
+> El estado real de avance vive en `CLAUDE.md` › "Estado del proyecto" — hoy
+> reorganizado en dos modos (Volumen 3D / Corte laser 2D) en vez de 7 fases
+> secuenciales; las fases 0-2 de esta tabla quedaron dentro de "Volumen". El
+> enfoque de la Fase 1/2 (una "pluma": pared delgada barrida por una curva
+> arqueada) se descarto por no ser imprimible — ver la seccion de
+> "Factibilidad de impresion" en `CLAUDE.md` y `geometry/spike.ts`.
 
 ## Roadmap
 
