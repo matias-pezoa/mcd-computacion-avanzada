@@ -9,16 +9,21 @@ import './App.css'
 import { Viewport } from './scene/Viewport'
 import { SpikeFieldScene } from './components/SpikeFieldScene'
 import { SpikeFieldPanel } from './components/SpikeFieldPanel'
+import { WaveFieldScene } from './components/WaveFieldScene'
+import { WaveFieldPanel } from './components/WaveFieldPanel'
 import { useAppStore } from './state/store'
 import { buildSpikeField } from './geometry/spikeField'
+import { buildWaveField } from './geometry/waveField'
 
 export default function App() {
   const mode = useAppStore((s) => s.mode)
   const setMode = useAppStore((s) => s.setMode)
   const reset = useAppStore((s) => s.reset)
   const planeSize = useAppStore((s) => s.field.planeSize)
+  const wavePlaneSize = useAppStore((s) => s.wave.planeSize)
 
   const spikes = useSpikeField()
+  const waves = useWaveFieldResult()
 
   return (
     <div className="app">
@@ -36,6 +41,13 @@ export default function App() {
             </button>
             <button
               type="button"
+              className={mode === 'wave' ? 'active' : ''}
+              onClick={() => setMode('wave')}
+            >
+              Ondas (3D)
+            </button>
+            <button
+              type="button"
               className={mode === 'laser' ? 'active' : ''}
               onClick={() => setMode('laser')}
             >
@@ -47,9 +59,9 @@ export default function App() {
           </button>
         </header>
 
-        {mode === 'volume' ? (
-          <SpikeFieldPanel result={spikes} />
-        ) : (
+        {mode === 'volume' && <SpikeFieldPanel result={spikes} />}
+        {mode === 'wave' && <WaveFieldPanel result={waves} />}
+        {mode === 'laser' && (
           <div className="panel">
             <section>
               <h3>Corte laser — proxima entrega</h3>
@@ -68,11 +80,16 @@ export default function App() {
           {mode === 'volume' && (
             <SpikeFieldScene geometry={spikes.geometry} planeSize={planeSize} />
           )}
+          {mode === 'wave' && (
+            <WaveFieldScene geometry={waves.geometry} planeSize={wavePlaneSize} />
+          )}
         </Viewport>
         <p className="note">
-          {mode === 'volume'
-            ? 'Puas solidas y autosoportadas que emergen del plano (base de tela), sin solape entre si. Altura, radios, inclinacion y densidad segun el mapa de atractores. 1 u = 1 cm.'
-            : 'Modo de corte laser en preparacion.'}
+          {mode === 'volume' &&
+            'Puas solidas y autosoportadas que emergen del plano (base de tela), sin solape entre si. Altura, radios, inclinacion y densidad segun el mapa de atractores. 1 u = 1 cm.'}
+          {mode === 'wave' &&
+            'Panel corrugado: costillas trigonometricas radiales desde cada atractor, facetadas y con base plana fija. 1 u = 1 cm.'}
+          {mode === 'laser' && 'Modo de corte laser en preparacion.'}
         </p>
       </main>
     </div>
@@ -84,6 +101,15 @@ function useSpikeField() {
   const attractors = useAppStore((s) => s.attractors)
 
   const result = useMemo(() => buildSpikeField(attractors, field), [attractors, field])
+  useDisposePrevious(result.geometry)
+  return result
+}
+
+function useWaveFieldResult() {
+  const wave = useAppStore((s) => s.wave)
+  const attractors = useAppStore((s) => s.waveAttractors)
+
+  const result = useMemo(() => buildWaveField(attractors, wave), [attractors, wave])
   useDisposePrevious(result.geometry)
   return result
 }

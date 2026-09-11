@@ -12,6 +12,7 @@ para la vision completa, el stack y el estado por fases.
 | Modo | Que | Estado |
 |---|---|---|
 | Volumen (3D) | Puas solidas y autosoportadas que emergen de un plano, dirigidas por un mapa de atractores. Imprimibles por construccion. Export STL. | ✅ |
+| Ondas (3D) | Panel corrugado: costillas trigonometricas radiales desde cada atractor, facetadas. Imprimible por construccion. Export STL. | ✅ |
 | Corte laser (2D) | Cortes parametricos solo-vector (huella de puas, auxetico, escamas). Export SVG/DXF. | pendiente |
 
 Roadmap posterior: imagen → vector / campo, kerf por material, importar maniqui.
@@ -70,6 +71,29 @@ prisma a cono liso — variedad de forma sin agregar parametros nuevos.
   (radio, intensidad, tipo de caida).
 - "Descargar STL (mm)" exporta **todas las puas fusionadas** en un unico
   archivo, convertido a milimetros.
+
+### Modo Ondas (3D)
+
+También todo emerge de un plano. Sobre él se generan **costillas** por
+trigonometría: cada atractor emite una ondulación radial (como un círculo
+concéntrico que se aleja de una piedra tirada al agua), con crestas cada
+"longitud de onda" y una envolvente que las apaga lejos del atractor.
+
+- El panel es un **sólido**: base plana de espesor mínimo (siempre horizontal,
+  igual que en Volumen) con las costillas talladas encima — nunca una lámina
+  hueca.
+- La malla se genera con **resolución baja** respecto de la longitud de onda
+  ("Facetas por onda") para que las crestas se vean como facetas — costillas —
+  en vez de una onda suavizada; se dibujan además las aristas de cada faceta
+  para que se noten sin depender del ángulo de luz.
+- **Amplitud recortada por seguridad**: la pendiente de la onda no puede
+  superar el vuelo autosoportado (mismo límite que Volumen); si el slider pide
+  más amplitud de la que esa longitud de onda permite, se aplica menos (el
+  panel avisa "recortada").
+
+Mismo flujo de atractores que Volumen (botón "+ Agregar atractor", gizmo para
+arrastrar), pero con su propio set independiente — mover uno no afecta al otro
+modo.
 
 ### Modo Corte laser (2D) — en preparacion
 

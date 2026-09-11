@@ -3,6 +3,7 @@ import * as THREE from 'three'
 import { useAppStore } from '../state/store'
 import type { FieldNumericKey } from '../state/store'
 import { ParamSlider } from './ParamSlider'
+import { AttractorEditor } from './AttractorEditor'
 import { FIELD_UI_PARAMS } from '../geometry/spikeField'
 import type { SpikeFieldResult } from '../geometry/spikeField'
 import {
@@ -11,8 +12,6 @@ import {
   MIN_TIP_RADIUS_MM,
   SAFE_OVERHANG_DEG,
 } from '../geometry/spike'
-import { ATTRACTOR_UI_PARAMS, FALLOFF_LABELS } from '../geometry/attractionField'
-import type { FalloffType } from '../geometry/attractionField'
 import { downloadStl } from '../io/exportSTL'
 import { threeToMm } from '../utils/units'
 
@@ -35,19 +34,6 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
   const selectAttractor = useAppStore((s) => s.selectAttractor)
   const updateAttractor = useAppStore((s) => s.updateAttractor)
   const removeAttractor = useAppStore((s) => s.removeAttractor)
-  const selected = attractors.find((a) => a.id === selectedId)
-
-  // posicion aleatoria dentro del panel: si se agregan varios de una, no
-  // quedan apilados exactamente uno sobre el otro. Se ajustan despues
-  // arrastrando el gizmo.
-  const addRandomAttractor = (planeSize: number) => {
-    const half = planeSize * 0.3
-    addAttractor([
-      (Math.random() * 2 - 1) * half,
-      3 + Math.random() * 2,
-      (Math.random() * 2 - 1) * half,
-    ])
-  }
 
   const set = (key: FieldNumericKey) => (v: number) => setFieldParam(key, v)
 
@@ -136,63 +122,15 @@ export function SpikeFieldPanel({ result }: SpikeFieldPanelProps) {
         </label>
       </section>
 
-      <section>
-        <h3>Atractores ({attractors.length})</h3>
-        <p className="hint">
-          Clic en una esfera roja para seleccionarla y arrastrarla con el gizmo (su altura
-          tambien influye en el campo).
-        </p>
-        <button type="button" onClick={() => addRandomAttractor(field.planeSize)}>
-          + Agregar atractor
-        </button>
-        <ul className="attractor-list">
-          {attractors.map((a) => (
-            <li key={a.id} className={a.id === selectedId ? 'active' : ''}>
-              <button
-                type="button"
-                className="link"
-                onClick={() => selectAttractor(a.id)}
-              >
-                {a.id.slice(-5)} · r{a.radius.toFixed(1)} · {FALLOFF_LABELS[a.falloff]}
-              </button>
-              <button type="button" className="del" onClick={() => removeAttractor(a.id)}>
-                ✕
-              </button>
-            </li>
-          ))}
-        </ul>
-        {selected && (
-          <div className="sub">
-            <h4>Atractor {selected.id.slice(-5)}</h4>
-            {ATTRACTOR_UI_PARAMS.map((p) => (
-              <ParamSlider
-                key={p.key}
-                param={p}
-                value={p.key === 'radius' ? selected.radius : selected.strength}
-                onChange={(v) =>
-                  updateAttractor(
-                    selected.id,
-                    p.key === 'radius' ? { radius: v } : { strength: v },
-                  )
-                }
-              />
-            ))}
-            <label className="param-label">Caida</label>
-            <div className="seg">
-              {(Object.keys(FALLOFF_LABELS) as FalloffType[]).map((f) => (
-                <button
-                  key={f}
-                  type="button"
-                  className={selected.falloff === f ? 'active' : ''}
-                  onClick={() => updateAttractor(selected.id, { falloff: f })}
-                >
-                  {FALLOFF_LABELS[f]}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
+      <AttractorEditor
+        attractors={attractors}
+        selectedId={selectedId}
+        planeSize={field.planeSize}
+        onAdd={addAttractor}
+        onSelect={selectAttractor}
+        onUpdate={updateAttractor}
+        onRemove={removeAttractor}
+      />
 
       <section>
         <h3>Exportar</h3>

@@ -1,7 +1,7 @@
 # Proyecto: Plataforma de Modelado Parametrico Textil (impresion 3D + corte laser)
 
 ## Vision
-Herramienta web para diseno de moda experimental. Dos modos, dos fabricaciones:
+Herramienta web para diseno de moda experimental. Tres modos, dos fabricaciones:
 
 1. **Volumen (3D):** TODO emerge de un plano 2D (la base de tela). Sobre ese plano
    se siembran "puas": piezas solidas (cono truncado) que crecen desde el plano;
@@ -9,7 +9,12 @@ Herramienta web para diseno de moda experimental. Dos modos, dos fabricaciones:
    exporta un unico STL para imprimir en 3D sobre la tela. NO hay edicion de
    curvas 3D a mano: la forma es 100% parametrica, y esta constrenida por
    construccion a lo que FDM puede imprimir sin soporte (ver mas abajo).
-2. **Corte laser (2D):** se trabaja SOLO desde el vector. Cortes parametricos con
+2. **Ondas (3D):** un panel solido con relieve corrugado — costillas radiales
+   generadas por funciones trigonometricas (`sin`) alrededor de cada atractor,
+   facetadas (malla de baja resolucion + sombreado plano) en vez de una onda
+   suavizada. Misma logica de plano-fijo y de recorte de amplitud por
+   factibilidad que Volumen, pero geometria y modulo separados. Export STL.
+3. **Corte laser (2D):** se trabaja SOLO desde el vector. Cortes parametricos con
    distintas familias de geometria (huella de las puas, retícula auxetica,
    escamas), export SVG/DXF con compensacion de kerf. (En preparacion.)
 
@@ -17,11 +22,11 @@ Ademas (roadmap): extraer datos de imagenes de referencia (contornos, luminancia
 como campo de atraccion) y libreria de materiales para el kerf.
 
 Referencia estetica: Iris van Herpen — piezas rigidas que se despliegan desde
-una base de malla/tul siguiendo la anatomia, densidad variable. El modo Volumen
-la reinterpreta con una geometria simple y estructuralmente solida (no una
-pared delgada arqueada) para que sea realmente imprimible.
+una base de malla/tul siguiendo la anatomia, densidad variable. Los modos 3D la
+reinterpretan con geometria simple y estructuralmente solida (no una pared
+delgada arqueada) para que sea realmente imprimible.
 
-## Factibilidad de impresion (modo Volumen) — restriccion de diseno, no detalle de implementacion
+## Factibilidad de impresion (modos 3D) — restriccion de diseno, no detalle de implementacion
 El primer intento (Fase "pluma": perfil 2D hueco barrido por una curva que se
 arqueaba hasta ~150°) era visualmente interesante pero NO imprimible: vuelo
 extremo sin soporte, punta mas fina que una linea de extrusion, base sin area
@@ -44,6 +49,12 @@ truncado, ver `geometry/spike.ts`) que es imprimible **por construccion**:
 - Las puas nunca se solapan entre si (rechazo por colision en el sampler).
 No relajar estos limites sin discutirlo — son la razon de ser de este modulo.
 
+El modo Ondas aplica el mismo principio con su propia geometria (`geometry/waveField.ts`,
+`SAFE_OVERHANG_DEG` compartido desde `geometry/printability.ts`): la amplitud de
+las costillas se recorta automaticamente para que la pendiente de la onda
+(`amplitud * 2*pi/longitudDeOnda` para una senoidal) no supere el vuelo
+autosoportado, y la base del panel es siempre plana y de espesor minimo.
+
 ## Stack tecnico (decision tomada, no reevaluar sin discutirlo)
 - React + Vite + TypeScript estricto
 - Three.js via React Three Fiber (@react-three/fiber) + @react-three/drei
@@ -65,8 +76,9 @@ Se agregan en la fase que las necesita, no antes:
 - Unidades: internamente en milimetros (mm) para todo lo fabricable. El viewport
   usa unidades de Three.js; la conversion pasa SIEMPRE por `src/utils/units.ts`
   (definicion actual: 1 unidad Three = 1 cm = 10 mm).
-- Cada modulo de geometria (spike, spikeField, attractionField) es una funcion
-  pura, testeable sin React. La logica de geometria no se mezcla con UI/render.
+- Cada modulo de geometria (spike, spikeField, waveField, attractionField) es
+  una funcion pura, testeable sin React. La logica de geometria no se mezcla
+  con UI/render.
 - Todo parametro de UI tiene descriptor `NumberParam` (nombre, min/max, step,
   default, unidad) en `src/utils/params.ts` o junto a su modulo.
 - Preferir composicion de funciones puras sobre clases.
@@ -77,10 +89,14 @@ Se agregan en la fase que las necesita, no antes:
 ```
 src/
   geometry/       # funciones puras (+ __tests__/):
+                  #   printability    constantes de factibilidad compartidas (SAFE_OVERHANG_DEG)
                   #   spike           una pua: cono truncado autosoportado
                   #   spikeField      plano + atractores -> campo de puas sin solape
+                  #   waveField       plano + atractores -> panel corrugado facetado
                   #   attractionField atractores + sampleField
-  components/     # SpikeFieldScene, SpikeFieldPanel, ParamSlider
+  components/     # SpikeFieldScene/Panel, WaveFieldScene/Panel,
+                  #   AttractorGizmos (viewport) y AttractorEditor (panel) compartidos
+                  #   entre ambos modos 3D, ParamSlider
   scene/          # Viewport (canvas R3F, luces, grid, OrbitControls)
   io/             # exportSTL
   state/          # store de zustand
@@ -98,6 +114,8 @@ src/
 ## Estado del proyecto
 
 - Modo Volumen: COMPLETO (campo de puas solidas desde el plano, dirigido por
+  atractores, imprimible por construccion).
+- Modo Ondas: COMPLETO (panel corrugado facetado desde el plano, dirigido por
   atractores, imprimible por construccion).
 - Modo Corte laser: PENDIENTE (solo un placeholder en la UI).
 
@@ -143,6 +161,44 @@ de factibilidad arriba) se descarto por no ser imprimible. Reemplazada por:
   pisos de fabricacion respetados, `limitedByStabilityCount` coincide con los
   placements marcados), `attractionField.test.ts`. 24 casos.
 
+### Modo Ondas — COMPLETO
+Panel solido con costillas trigonometricas. Comparte con Volumen el concepto de
+"todo emerge de un plano fijo" y la logica de recorte por factibilidad, pero es
+un modulo de geometria totalmente distinto (heightfield extruido, no piezas
+discretas).
+
+- `geometry/waveField.ts`: `buildWaveField(attractors, params)` — cada atractor
+  emite una ondulacion RADIAL (`0.5+0.5*sin(2*pi*distancia/longitudDeOnda)`),
+  con la misma envolvente `falloff()` de attractionField.ts; varios atractores
+  se combinan con el mismo `combine` (max/sum) que Volumen. El panel es un
+  SOLIDO extruido: base plana en y=0 (espesor minimo, piso
+  `MIN_BASE_THICKNESS_MM`), superficie superior ondulada, paredes laterales que
+  cierran el volumen. La malla se genera con resolucion BAJA respecto de la
+  longitud de onda (`facetsPerWave`, bajo = costillas angulosas) — no hay
+  triangulacion manual propensa a errores de winding: cada triangulo se orienta
+  comparando su normal contra una direccion "mas o menos hacia afuera" para esa
+  cara (`pushOutwardTri`).
+  Amplitud recortada automaticamente: la pendiente maxima de una senoidal
+  `A*sin(2*pi*d/L)` es `A*(2*pi/L)`, asi que se limita `A` para que esa
+  pendiente no supere `maxOverhangDeg` (mismo principio y misma
+  `SAFE_OVERHANG_DEG`, ahora en `geometry/printability.ts`, que Volumen).
+  `amplitudeLimited` indica si se recorto.
+- UI: `WaveFieldScene` + `WaveFieldPanel`, usando los mismos `AttractorGizmos`/
+  `AttractorEditor` compartidos que Volumen pero con su PROPIO set de
+  atractores (`waveAttractors` en el store, independiente de `attractors`).
+- Render: material con `flatShading` (facetas, no onda suavizada) + `<Edges>`
+  de drei dibujando las aristas de cada faceta — sin esto ultimo las costillas
+  casi no se distinguen a la distancia de camara por defecto. El mesh de este
+  modo NO usa `castShadow`: una superficie continua corrugada auto-sombreandose
+  genera "shadow acne" (ruido periodico falso) con el mapa de sombras
+  compartido del Viewport — se verifico numericamente (sampleando alturas de
+  la malla) que la geometria era correcta antes de identificar que el ruido
+  visual era de sombreado, no de la malla.
+- Tests: `waveField.test.ts` — base siempre plana en y=0, panel liso sin
+  atractores, aparecen crestas con atractor, amplitud se recorta sin superar
+  el techo (y nunca al reves), techo absoluto respetado, sum >= max en
+  solapes, limites de segmentos por eje, malla valida, determinismo. 10 casos.
+
 ### Interaccion: por que no hay "clic en el plano para agregar atractor"
 Se probo y se saco: al arrastrar el gizmo de `TransformControls` (drei) para
 mover un atractor, el gizmo NO es un objeto de React Three Fiber con su propio
@@ -176,4 +232,12 @@ en el viewport, verificar primero que no reaparezca este problema.
 - Variedad de formas futura: `segments` ya permite piramide/prisma/cono desde el
   mismo codigo; si se quiere una familia distinta (domo, etc.) evaluar si vale
   la pena antes de agregar mas parametros.
+- Los defaults de `DEFAULT_WAVE_FIELD` (planeSize 24, longitud de onda 70mm,
+  amplitud pedida 22mm, facetsPerWave 3) se ajustaron a ojo para que las
+  costillas se noten con la camara por defecto del Viewport — si se cambia el
+  panel o la camara, revisar que las crestas sigan siendo legibles (usar
+  `<Edges>` ayuda mucho mas que subir amplitud).
+- `AttractorGizmos`/`AttractorEditor` son compartidos entre Volumen y Ondas;
+  si se agrega un tercer modo con atractores (p. ej. algo en Corte laser),
+  reusarlos en vez de duplicar.
 - Deploy: `npm run build` -> `../../plataforma-parametrica/`; commit + push a `main`.

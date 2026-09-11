@@ -49,13 +49,9 @@ import * as THREE from 'three'
 import { clamp, DEG2RAD, RAD2DEG } from '../utils/params'
 import type { NumberParam } from '../utils/params'
 import { mmToThree } from '../utils/units'
+import { SAFE_OVERHANG_DEG } from './printability'
 
-/**
- * Angulo de vuelo (medido desde la vertical) que FDM imprime sin soporte de
- * forma confiable, independientemente del material. Es un techo defensivo:
- * ningun parametro puede llevar una pua por encima de esto.
- */
-export const SAFE_OVERHANG_DEG = 45
+export { SAFE_OVERHANG_DEG }
 
 /**
  * Cuantos "radios de base" puede proyectar la punta en horizontal antes de
