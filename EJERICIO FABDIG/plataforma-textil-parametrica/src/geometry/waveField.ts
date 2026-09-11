@@ -1,66 +1,95 @@
 /**
- * "Ondas": panel solido con relieve corrugado (costillas) generado por
- * funciones trigonometricas, dirigido por el mapa de atractores.
+ * "Ondas": peine de costillas INDEPENDIENTES (una por una, sin plancha que
+ * las una) generadas por corte transversal (contour) de una superficie de
+ * ondulacion trigonometrica dirigida por el mapa de atractores.
  *
- * Cada atractor emite una ondulacion RADIAL (como un circulo concentrico
- * que se aleja de una piedra tirada al agua): la altura de la costilla en un
- * punto del panel es `sin(2*pi*distancia/longitudDeOnda)`, con una envolvente
- * (el mismo `falloff` de attractionField.ts) que apaga la onda lejos del
- * atractor. Varios atractores se combinan igual que en el modo Volumen (max
- * o suma).
+ * Esto NO es un panel corrugado tallado en un bloque solido (ese fue el
+ * primer intento de este modo, ver historial): eso es la logica de un
+ * calado CNC, donde hace falta una plancha de base porque la maquina resta
+ * material de un bloque. Aca se imprime en 3D: cada costilla es su propio
+ * solido cerrado, nace en y = 0 y no hay ninguna plancha que las conecte
+ * entre si. La "base" es la tela ya puesta en la cama de impresion (ver
+ * `BaseShapeGround`, que sigue siendo solo la referencia visual de esa tela)
+ * — por eso no hace falta modelar espesor de base ninguno.
  *
- * El panel es un SOLIDO: una base plana de espesor minimo (siempre horizontal,
- * apoyada de punta a punta sobre la tela — misma logica que en spike.ts: la
- * base nunca se inclina ni se afina) con la superficie de arriba deformada
- * por las ondas. La malla se genera con resolucion BAJA respecto de la
- * longitud de onda (`facetsPerWave`) para que las crestas se vean como
- * facetas planas — costillas — en vez de una onda suavizada; el material se
- * renderiza con sombreado plano (`flatShading`) para acentuarlo.
+ * Construccion de cada costilla: es una linea recta en X (perpendicular a
+ * las demas, todas paralelas y equiespaciadas por `spacingMm`); a lo largo
+ * de su longitud en Z se muestrea la MISMA ondulacion radial que el modo
+ * Volumen usa para atraer (`attractionField.falloff`, combinada por atractor
+ * como un circulo concentrico que se aleja de una piedra tirada al agua), y
+ * esa altura se extruye como un solido delgado (espesor `ribThicknessMm`)
+ * de seccion "cerca de tierra". Una costilla nunca baja de una altura piso
+ * (`heightFloorMm`): en zonas sin influencia de ningun atractor sigue
+ * siendo un diente visible del peine, no desaparece.
  *
- * Factibilidad de impresion: la amplitud se recorta para que la pendiente
- * maxima de la onda (que para una senoidal es amplitud * 2*pi/longitudDeOnda)
- * nunca supere el angulo de vuelo autosoportado — mismo principio que en
- * spike.ts, misma constante `SAFE_OVERHANG_DEG`.
+ * Si el contorno del panel (una base importada, con agujeros) corta una
+ * costilla en tramos separados, cada tramo se emite como su propio solido
+ * cerrado independiente (con tapas en sus dos extremos) — no se intenta
+ * "saltar" el agujero con una sola pieza.
+ *
+ * Factibilidad de impresion: a diferencia de una superficie corrugada
+ * continua, una costilla delgada de pie a copete NO tiene vuelo/voladizo
+ * real (sus caras laterales son practicamente verticales; el perfil
+ * superior simplemente sube y baja dentro de esa pared, nunca "cuelga"
+ * hacia afuera) — por eso este modo no recorta la amplitud por angulo como
+ * el modo Volumen. Los pisos que si aplican: espesor minimo de costilla
+ * (`MIN_RIB_THICKNESS_MM`, ~2 perimetros de una boquilla de 0.4mm),
+ * separacion minima entre costillas vecinas para que no se toquen
+ * (`MIN_SPACING_MM` + un margen fijo `RIB_GAP_MM`, que recorta el espesor
+ * pedido si no entra) y una altura piso (`MIN_RIB_HEIGHT_MM`) para que
+ * ninguna costilla se adelgace hasta desaparecer. Ademas se reporta la
+ * esbeltez maxima (altura / espesor) como aviso: costillas muy altas y
+ * finas pueden vibrar o desprenderse durante la impresion aunque cada corte
+ * sea imprimible.
  *
  * Funcion pura.
  */
 import * as THREE from 'three'
-import { clamp, DEG2RAD } from '../utils/params'
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js'
+import { clamp } from '../utils/params'
 import type { NumberParam } from '../utils/params'
 import { mmToThree, threeToMm } from '../utils/units'
-import { SAFE_OVERHANG_DEG } from './printability'
 import { falloff } from './attractionField'
 import type { Attractor, CombineMode } from './attractionField'
 import { pointInBoundary, polygonBounds, type Boundary, type Vec2 } from './polygon'
 
-/** Piso de espesor de la base, en mm (2 perimetros de una boquilla de 0.4mm). */
-export const MIN_BASE_THICKNESS_MM = 0.8
-/** Piso de longitud de onda, en mm (que una costilla no sea mas fina que un par de lineas). */
+/** Piso de espesor de costilla, en mm (2 perimetros de una boquilla de 0.4mm). */
+export const MIN_RIB_THICKNESS_MM = 0.8
+/** Piso de separacion entre ejes de costillas vecinas, en mm. */
+export const MIN_SPACING_MM = 2
+/** Margen de aire fijo entre las caras de dos costillas vecinas, en mm. */
+export const RIB_GAP_MM = 0.6
+/** Piso de altura de costilla (aun sin influencia de ningun atractor), en mm. */
+export const MIN_RIB_HEIGHT_MM = 1
+/** Piso de longitud de onda, en mm (que la ondulacion no sea mas fina que un par de lineas). */
 export const MIN_WAVELENGTH_MM = 4
 
 export interface WaveFieldParams {
-  /** Lado del panel cuadrado (u3d). Centrado en el origen, base en y = 0. */
+  /** Lado del panel cuadrado (u3d). Centrado en el origen, costillas desde y = 0. */
   planeSize: number
-  /** Espesor de la base plana, siempre constante (piso MIN_BASE_THICKNESS_MM). */
-  thicknessBaseMm: number
-  /** Amplitud pedida de las costillas (se recorta por seguridad, ver arriba). */
+  /** Distancia entre ejes de costillas consecutivas (piso MIN_SPACING_MM). */
+  spacingMm: number
+  /** Espesor pedido de cada costilla (se recorta si no entra en `spacingMm`, ver arriba). */
+  ribThicknessMm: number
+  /** Altura minima de costilla, incluso sin influencia de atractores. */
+  heightFloorMm: number
+  /** Amplitud pedida de las crestas, por encima de la altura piso. */
   amplitudeMm: number
-  /** Distancia entre crestas consecutivas (piso MIN_WAVELENGTH_MM). */
+  /** Distancia entre crestas consecutivas a lo largo de una costilla (piso MIN_WAVELENGTH_MM). */
   wavelengthMm: number
-  /** Segmentos de malla por longitud de onda. Bajo = facetas grandes (costillas). */
+  /** Muestras del perfil por longitud de onda. Bajo = perfil angular; alto = curva suave. */
   facetsPerWave: number
-  /** Techo de pendiente autosoportada (grados, <= SAFE_OVERHANG_DEG). */
-  maxOverhangDeg: number
   combine: CombineMode
 }
 
 export const DEFAULT_WAVE_FIELD: WaveFieldParams = {
   planeSize: 24,
-  thicknessBaseMm: 1.5,
+  spacingMm: 5,
+  ribThicknessMm: 1.2,
+  heightFloorMm: 3,
   amplitudeMm: 22,
   wavelengthMm: 70,
-  facetsPerWave: 3,
-  maxOverhangDeg: 45,
+  facetsPerWave: 6,
   combine: 'max',
 }
 
@@ -75,12 +104,30 @@ export const WAVE_UI_PARAMS: readonly NumberParam[] = [
     unit: 'u3d',
   },
   {
-    key: 'thicknessBaseMm',
-    label: 'Espesor de la base',
-    min: MIN_BASE_THICKNESS_MM,
-    max: 5,
+    key: 'spacingMm',
+    label: 'Separacion entre costillas',
+    min: MIN_SPACING_MM,
+    max: 30,
+    step: 0.5,
+    default: 5,
+    unit: 'mm',
+  },
+  {
+    key: 'ribThicknessMm',
+    label: 'Espesor de costilla',
+    min: MIN_RIB_THICKNESS_MM,
+    max: 6,
     step: 0.1,
-    default: 1.5,
+    default: 1.2,
+    unit: 'mm',
+  },
+  {
+    key: 'heightFloorMm',
+    label: 'Altura minima (valle)',
+    min: MIN_RIB_HEIGHT_MM,
+    max: 30,
+    step: 0.5,
+    default: 3,
     unit: 'mm',
   },
   {
@@ -94,45 +141,44 @@ export const WAVE_UI_PARAMS: readonly NumberParam[] = [
   },
   {
     key: 'amplitudeMm',
-    label: 'Amplitud (pedida)',
+    label: 'Amplitud (cresta)',
     min: 0,
-    max: 40,
-    step: 0.1,
+    max: 60,
+    step: 0.5,
     default: 22,
     unit: 'mm',
   },
   {
     key: 'facetsPerWave',
-    label: 'Facetas por onda',
-    min: 1,
-    max: 16,
+    label: 'Muestras por onda',
+    min: 2,
+    max: 24,
     step: 1,
-    default: 3,
+    default: 6,
     unit: '-',
-  },
-  {
-    key: 'maxOverhangDeg',
-    label: 'Vuelo maximo (por capa)',
-    min: 0,
-    max: SAFE_OVERHANG_DEG,
-    step: 1,
-    default: 45,
-    unit: 'grados',
   },
 ]
 
-const MAX_SEGMENTS_PER_AXIS = 200
+const MAX_RIBS = 200
+const MAX_SAMPLES_PER_RIB = 200
 
 export interface WaveFieldResult {
+  /** Malla con todas las costillas fusionadas (cada una sigue siendo un solido disjunto). */
   geometry: THREE.BufferGeometry
   bounds: THREE.Box3
   triangleCount: number
-  segmentsU: number
-  segmentsV: number
-  /** Amplitud efectivamente usada (mm), tras el recorte de seguridad. */
-  appliedAmplitudeMm: number
-  /** true si la amplitud pedida se recorto por vuelo autosoportado. */
-  amplitudeLimited: boolean
+  /** Cuantos ejes de costilla caen dentro del panel (antes de partirlos por el contorno). */
+  ribCount: number
+  /** Cuantas piezas solidas independientes se emitieron en total (una costilla puede partirse en varias). */
+  segmentCount: number
+  /** Espesor de costilla efectivamente usado (mm), tras el recorte por separacion. */
+  appliedRibThicknessMm: number
+  /** true si el espesor pedido se recorto porque no entraba en la separacion pedida. */
+  thicknessLimited: boolean
+  /** Altura maxima alcanzada por cualquier costilla (mm), para juzgar esbeltez. */
+  maxHeightMm: number
+  /** Esbeltez maxima (altura / espesor): aviso de vibracion/desprendimiento en costillas muy altas y finas. */
+  maxAspectRatio: number
 }
 
 export function buildWaveField(
@@ -140,59 +186,72 @@ export function buildWaveField(
   params: WaveFieldParams,
   boundary?: Boundary | null,
 ): WaveFieldResult {
-  const thickness = mmToThree(Math.max(MIN_BASE_THICKNESS_MM, params.thicknessBaseMm))
+  const spacing = mmToThree(Math.max(MIN_SPACING_MM, params.spacingMm))
+  const requestedThickness = mmToThree(Math.max(MIN_RIB_THICKNESS_MM, params.ribThicknessMm))
+  const gap = mmToThree(RIB_GAP_MM)
+  const thickness = Math.max(
+    mmToThree(MIN_RIB_THICKNESS_MM),
+    Math.min(requestedThickness, spacing - gap),
+  )
+  const heightFloor = mmToThree(Math.max(MIN_RIB_HEIGHT_MM, params.heightFloorMm))
+  const amplitude = mmToThree(Math.max(0, params.amplitudeMm))
   const wavelength = mmToThree(Math.max(MIN_WAVELENGTH_MM, params.wavelengthMm))
-  const maxOverhang = clamp(params.maxOverhangDeg, 0, SAFE_OVERHANG_DEG)
-
-  // pendiente maxima de A*sin(2*pi*d/L) es A*(2*pi/L); se recorta A para que
-  // esa pendiente no supere tan(maxOverhangDeg).
-  const maxSafeAmplitude = (Math.tan(maxOverhang * DEG2RAD) * wavelength) / (2 * Math.PI)
-  const requestedAmplitude = mmToThree(Math.max(0, params.amplitudeMm))
-  const amplitude = Math.min(requestedAmplitude, maxSafeAmplitude)
+  const facets = Math.max(2, Math.round(params.facetsPerWave))
 
   const domain = resolveDomain(params.planeSize, boundary)
   const width = domain.maxX - domain.minX
   const height = domain.maxZ - domain.minZ
 
-  const facetsPerWave = Math.max(1, Math.round(params.facetsPerWave))
-  const segmentLength = wavelength / facetsPerWave
-  const nu = clamp(Math.round(width / segmentLength), 4, MAX_SEGMENTS_PER_AXIS)
-  const nv = clamp(Math.round(height / segmentLength), 4, MAX_SEGMENTS_PER_AXIS)
+  const ribCount = clamp(width > 0 ? Math.floor(width / spacing) + 1 : 1, 1, MAX_RIBS)
+  const effectiveSpacing = ribCount > 1 ? width / (ribCount - 1) : 0
+
+  const sampleStep = wavelength / facets
+  const sampleCount = clamp(height > 0 ? Math.round(height / sampleStep) : 1, 4, MAX_SAMPLES_PER_RIB)
 
   const heightAt = (x: number, z: number): number =>
-    rippleHeight(x, z, attractors, params.combine, wavelength) * amplitude
+    heightFloor + rippleHeight(x, z, attractors, params.combine, wavelength) * amplitude
 
-  const { positions, indices } = buildSolidHeightfield(
-    domain,
-    nu,
-    nv,
-    thickness,
-    heightAt,
-  )
+  const geoms: THREE.BufferGeometry[] = []
+  let segmentCount = 0
+  let maxHeight = 0
 
-  const geometry = new THREE.BufferGeometry()
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
-  geometry.setIndex(indices)
-  geometry.computeVertexNormals()
-  geometry.computeBoundingBox()
-  geometry.computeBoundingSphere()
+  for (let i = 0; i < ribCount; i++) {
+    const x = ribCount > 1 ? domain.minX + i * effectiveSpacing : (domain.minX + domain.maxX) / 2
+    for (const run of insideRuns(domain, x, sampleCount)) {
+      const zs: number[] = []
+      const hs: number[] = []
+      for (let s = run.start; s <= run.end; s++) {
+        const z = domain.minZ + (s / sampleCount) * height
+        const h = heightAt(x, z)
+        zs.push(z)
+        hs.push(h)
+        if (h > maxHeight) maxHeight = h
+      }
+      if (zs.length < 2) continue
+      geoms.push(ribSegmentGeometry(x, thickness, zs, hs))
+      segmentCount++
+    }
+  }
 
-  // Ojo: geometry.computeBoundingBox() recorre TODO el atributo position, sin
-  // filtrar por el indice — con una base recortada (boundary) quedan vertices
-  // "huerfanos" (celdas fuera del dominio, no referenciadas por ningun
-  // triangulo) que igual tienen una altura calculada e inflarian el
-  // "Dimensiones" que ve el usuario. Las dimensiones reportadas se calculan
-  // SOLO sobre los vertices realmente indexados (los que forman parte del solido).
-  const bounds = computeIndexedBounds(positions, indices)
+  const geometry = geoms.length ? mergeNormalized(geoms) : new THREE.BufferGeometry()
+  geoms.forEach((g) => g.dispose())
+
+  const bounds = new THREE.Box3()
+  if (hasVerts(geometry)) {
+    geometry.computeBoundingBox()
+    if (geometry.boundingBox) bounds.copy(geometry.boundingBox)
+  }
 
   return {
     geometry,
     bounds,
-    triangleCount: indices.length / 3,
-    segmentsU: nu,
-    segmentsV: nv,
-    appliedAmplitudeMm: threeToMm(amplitude),
-    amplitudeLimited: amplitude < requestedAmplitude - 1e-9,
+    triangleCount: indexCount(geometry) / 3,
+    ribCount,
+    segmentCount,
+    appliedRibThicknessMm: threeToMm(thickness),
+    thicknessLimited: thickness < requestedThickness - 1e-9,
+    maxHeightMm: threeToMm(maxHeight),
+    maxAspectRatio: thickness > 0 ? maxHeight / thickness : 0,
   }
 }
 
@@ -232,7 +291,8 @@ function resolveDomain(planeSize: number, boundary?: Boundary | null): Domain {
 
 /**
  * Ondulacion radial combinada de todos los atractores en (x, z), normalizada
- * a [0, 1]. 0 = panel liso en ese punto, 1 = cresta maxima.
+ * a [0, 1]. 0 = sin influencia en ese punto (costilla en su altura piso),
+ * 1 = cresta maxima.
  */
 function rippleHeight(
   x: number,
@@ -257,157 +317,131 @@ function rippleHeight(
   return clamp(acc, 0, 1)
 }
 
+interface Run {
+  start: number
+  end: number
+}
+
 /**
- * Extruye un campo de alturas `heightAt(x,z)` (por encima de `thickness`) en
- * un solido cerrado sobre el area que pasa `domain.test`: base plana en y=0,
- * superficie superior ondulada, y paredes laterales que unen ambas siguiendo
- * el CONTORNO real del area rellena (no necesariamente un rectangulo).
- *
- * Enfoque: se generan los vertices de TODA la grilla (rectangulo envolvente),
- * pero solo se emiten triangulos de tapa para las celdas cuyo CENTRO cae
- * dentro del dominio (mascara); las paredes se agregan en cada arista de una
- * celda rellena cuyo vecino en esa direccion NO esta rellena (fuera de la
- * grilla o fuera del dominio) — asi el contorno sale "a escalones" del tamaño
- * de la grilla, valido para cualquier forma sin necesitar triangular el
- * poligono exacto. La orientacion de cada triangulo se decide comparando su
- * normal con una direccion de referencia "mas o menos hacia afuera" (para las
- * paredes, del centro de la celda hacia la arista), asi que no depende de
- * acertar un convenio de indices a mano.
+ * Tramos de muestras (indices [0, sampleCount] a lo largo de Z) donde el eje
+ * `x` de una costilla cae dentro del dominio. Un contorno no convexo (p. ej.
+ * un agujero) puede partir una costilla en varios tramos disjuntos; cada uno
+ * se devuelve por separado para emitirse como su propio solido cerrado.
  */
-function buildSolidHeightfield(
-  domain: Domain,
-  nu: number,
-  nv: number,
-  thickness: number,
-  heightAt: (x: number, z: number) => number,
-): { positions: number[]; indices: number[] } {
-  const width = domain.maxX - domain.minX
+function insideRuns(domain: Domain, x: number, sampleCount: number): Run[] {
   const height = domain.maxZ - domain.minZ
-  const rowU = nu + 1
-  const idx = (iv: number, iu: number): number => iv * rowU + iu
-  const gridX = (iu: number): number => domain.minX + (iu / nu) * width
-  const gridZ = (iv: number): number => domain.minZ + (iv / nv) * height
+  const inside: boolean[] = []
+  for (let s = 0; s <= sampleCount; s++) {
+    const z = domain.minZ + (s / sampleCount) * height
+    inside.push(domain.test(x, z))
+  }
+  const runs: Run[] = []
+  let start = -1
+  for (let s = 0; s <= sampleCount; s++) {
+    if (inside[s] && start < 0) start = s
+    if ((!inside[s] || s === sampleCount) && start >= 0) {
+      const end = inside[s] ? s : s - 1
+      if (end > start) runs.push({ start, end })
+      start = -1
+    }
+  }
+  return runs
+}
+
+/**
+ * Solido cerrado de UNA costilla (o UN tramo de costilla): pie plano en
+ * y = 0 (lo que se apoya contra la tela en la cama de impresion), perfil
+ * superior siguiendo `hs[j]` en cada `zs[j]`, espesor constante `thickness`
+ * en X, y tapas en los dos extremos de la lista de muestras. Vertices
+ * duplicados entre solidos (no hay: cada costilla es su propia malla) para
+ * que cada pieza sea manifold por separado.
+ */
+function ribSegmentGeometry(
+  x: number,
+  thickness: number,
+  zs: readonly number[],
+  hs: readonly number[],
+): THREE.BufferGeometry {
+  const half = thickness / 2
+  const xf = x - half
+  const xb = x + half
+  const n = zs.length
 
   const positions: number[] = []
-  const topStart = 0
-  for (let iv = 0; iv <= nv; iv++) {
-    for (let iu = 0; iu <= nu; iu++) {
-      const x = gridX(iu)
-      const z = gridZ(iv)
-      positions.push(x, thickness + heightAt(x, z), z)
-    }
-  }
-  const botStart = positions.length / 3
-  for (let iv = 0; iv <= nv; iv++) {
-    for (let iu = 0; iu <= nu; iu++) {
-      positions.push(gridX(iu), 0, gridZ(iv))
-    }
+  const frontBottom: number[] = []
+  const frontTop: number[] = []
+  const backBottom: number[] = []
+  const backTop: number[] = []
+
+  const push = (px: number, py: number, pz: number): number => {
+    const i = positions.length / 3
+    positions.push(px, py, pz)
+    return i
   }
 
-  // mascara por celda (centro de la celda dentro del dominio)
-  const filled = new Uint8Array(nu * nv)
-  for (let iv = 0; iv < nv; iv++) {
-    for (let iu = 0; iu < nu; iu++) {
-      const cx = domain.minX + ((iu + 0.5) / nu) * width
-      const cz = domain.minZ + ((iv + 0.5) / nv) * height
-      filled[iv * nu + iu] = domain.test(cx, cz) ? 1 : 0
-    }
+  for (let j = 0; j < n; j++) {
+    const z = zs[j]
+    const h = hs[j]
+    frontBottom.push(push(xf, 0, z))
+    frontTop.push(push(xf, h, z))
+    backBottom.push(push(xb, 0, z))
+    backTop.push(push(xb, h, z))
   }
-  const isFilled = (iv: number, iu: number): boolean =>
-    iv >= 0 && iv < nv && iu >= 0 && iu < nu && filled[iv * nu + iu] === 1
 
   const indices: number[] = []
-  const pushTri = (i0: number, i1: number, i2: number, ref: [number, number, number]) => {
-    pushOutwardTri(positions, indices, i0, i1, i2, ref)
-  }
-  const vx = (i: number): number => positions[i * 3]
-  const vz = (i: number): number => positions[i * 3 + 2]
-
-  for (let iv = 0; iv < nv; iv++) {
-    for (let iu = 0; iu < nu; iu++) {
-      if (!isFilled(iv, iu)) continue
-      const a = idx(iv, iu)
-      const b = idx(iv, iu + 1)
-      const c = idx(iv + 1, iu)
-      const d = idx(iv + 1, iu + 1)
-
-      // tapas (superior e inferior) de esta celda
-      pushTri(topStart + a, topStart + b, topStart + c, [0, 1, 0])
-      pushTri(topStart + b, topStart + d, topStart + c, [0, 1, 0])
-      pushTri(botStart + a, botStart + b, botStart + c, [0, -1, 0])
-      pushTri(botStart + b, botStart + d, botStart + c, [0, -1, 0])
-
-      // pared en cada arista cuyo vecino no esta relleno
-      const cx = domain.minX + ((iu + 0.5) / nu) * width
-      const cz = domain.minZ + ((iv + 0.5) / nv) * height
-      const edges: [neighborIv: number, neighborIu: number, v0: number, v1: number][] = [
-        [iv - 1, iu, a, b], // arista "v-": comparte fila iv (a,b)
-        [iv + 1, iu, c, d], // arista "v+": comparte fila iv+1 (c,d)
-        [iv, iu - 1, a, c], // arista "u-": comparte columna iu (a,c)
-        [iv, iu + 1, b, d], // arista "u+": comparte columna iu+1 (b,d)
-      ]
-      for (const [nIv, nIu, v0, v1] of edges) {
-        if (isFilled(nIv, nIu)) continue
-        const t0 = topStart + v0
-        const t1 = topStart + v1
-        const b0 = botStart + v0
-        const b1 = botStart + v1
-        const midx = (vx(t0) + vx(t1)) / 2
-        const midz = (vz(t0) + vz(t1)) / 2
-        let refx = midx - cx
-        let refz = midz - cz
-        const len = Math.hypot(refx, refz) || 1
-        refx /= len
-        refz /= len
-        const ref: [number, number, number] = [refx, 0, refz]
-        pushTri(t0, t1, b0, ref)
-        pushTri(t1, b1, b0, ref)
-      }
-    }
+  const quad = (a: number, b: number, c: number, d: number) => {
+    indices.push(a, b, c, a, c, d)
   }
 
-  return { positions, indices }
+  for (let j = 0; j < n - 1; j++) {
+    // cara frontal (x = xf, normal hacia -X)
+    quad(frontBottom[j], frontBottom[j + 1], frontTop[j + 1], frontTop[j])
+    // cara trasera (x = xb, normal hacia +X)
+    quad(backTop[j], backTop[j + 1], backBottom[j + 1], backBottom[j])
+    // filo superior (perfil de la onda)
+    quad(frontTop[j], frontTop[j + 1], backTop[j + 1], backTop[j])
+    // pie (y = 0, normal hacia -Y, apoya contra la tela)
+    quad(frontBottom[j + 1], frontBottom[j], backBottom[j], backBottom[j + 1])
+  }
+
+  // tapa del extremo inicial (normal hacia -Z: el solido crece hacia +Z desde aca)
+  quad(frontTop[0], backTop[0], backBottom[0], frontBottom[0])
+  // tapa del extremo final (normal hacia +Z)
+  const last = n - 1
+  quad(frontBottom[last], backBottom[last], backTop[last], frontTop[last])
+
+  const geo = new THREE.BufferGeometry()
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3))
+  geo.setIndex(indices)
+  geo.computeVertexNormals()
+  return geo
 }
 
-/** Caja envolvente SOLO de los vertices efectivamente indexados (usados). */
-function computeIndexedBounds(positions: number[], indices: number[]): THREE.Box3 {
-  const box = new THREE.Box3()
-  for (let i = 0; i < indices.length; i++) {
-    const o = indices[i] * 3
-    box.min.x = Math.min(box.min.x, positions[o])
-    box.min.y = Math.min(box.min.y, positions[o + 1])
-    box.min.z = Math.min(box.min.z, positions[o + 2])
-    box.max.x = Math.max(box.max.x, positions[o])
-    box.max.y = Math.max(box.max.y, positions[o + 1])
-    box.max.z = Math.max(box.max.z, positions[o + 2])
-  }
-  return box
+/** Fusiona dejando solo `position` + `index` (clona los inputs), recalcula normales. */
+function mergeNormalized(geoms: THREE.BufferGeometry[]): THREE.BufferGeometry {
+  const clean = geoms.map((g) => {
+    const c = new THREE.BufferGeometry()
+    c.setAttribute('position', g.getAttribute('position').clone())
+    const idx = g.getIndex()
+    if (idx) c.setIndex(idx.clone())
+    return c
+  })
+  const merged = mergeGeometries(clean, false) ?? new THREE.BufferGeometry()
+  clean.forEach((c) => c.dispose())
+  merged.computeVertexNormals()
+  merged.computeBoundingBox()
+  merged.computeBoundingSphere()
+  return merged
 }
 
-const _p0 = new THREE.Vector3()
-const _p1 = new THREE.Vector3()
-const _p2 = new THREE.Vector3()
-const _e1 = new THREE.Vector3()
-const _e2 = new THREE.Vector3()
-const _n = new THREE.Vector3()
-const _ref = new THREE.Vector3()
+function hasVerts(g: THREE.BufferGeometry): boolean {
+  const pos = g.getAttribute('position')
+  return !!pos && pos.count > 0
+}
 
-/** Empuja el triangulo (i0,i1,i2) en el orden que hace que su normal apunte hacia `ref`. */
-function pushOutwardTri(
-  positions: number[],
-  indices: number[],
-  i0: number,
-  i1: number,
-  i2: number,
-  ref: [number, number, number],
-): void {
-  _p0.fromArray(positions, i0 * 3)
-  _p1.fromArray(positions, i1 * 3)
-  _p2.fromArray(positions, i2 * 3)
-  _e1.subVectors(_p1, _p0)
-  _e2.subVectors(_p2, _p0)
-  _n.crossVectors(_e1, _e2)
-  _ref.set(ref[0], ref[1], ref[2])
-  if (_n.dot(_ref) < 0) indices.push(i0, i2, i1)
-  else indices.push(i0, i1, i2)
+function indexCount(g: THREE.BufferGeometry): number {
+  const idx = g.getIndex()
+  if (idx) return idx.count
+  const pos = g.getAttribute('position')
+  return pos ? pos.count : 0
 }

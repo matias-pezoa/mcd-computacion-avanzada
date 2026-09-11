@@ -1,4 +1,4 @@
-/** Panel del modo Ondas: panel corrugado (costillas trigonometricas) desde un plano. */
+/** Panel del modo Ondas: peine de costillas independientes (contour) desde un plano. */
 import * as THREE from 'three'
 import { useAppStore } from '../state/store'
 import type { WaveNumericKey } from '../state/store'
@@ -7,11 +7,11 @@ import { AttractorEditor } from './AttractorEditor'
 import { BaseShapeImporter } from './BaseShapeImporter'
 import {
   WAVE_UI_PARAMS,
-  MIN_BASE_THICKNESS_MM,
+  MIN_RIB_THICKNESS_MM,
+  MIN_SPACING_MM,
   MIN_WAVELENGTH_MM,
 } from '../geometry/waveField'
 import type { WaveFieldResult } from '../geometry/waveField'
-import { SAFE_OVERHANG_DEG } from '../geometry/printability'
 import { downloadStl } from '../io/exportSTL'
 import { mmToThree, threeToMm } from '../utils/units'
 
@@ -47,12 +47,16 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
       <section>
         <h3>Factibilidad de impresion (FDM)</h3>
         <p className="hint">
-          El panel es un solido: base plana de espesor minimo (≥ {MIN_BASE_THICKNESS_MM}
-          mm, siempre horizontal y apoyada de punta a punta) con costillas talladas
-          encima. La amplitud de las costillas se recorta automaticamente para que su
-          pendiente nunca supere el vuelo autosoportado (≤ {SAFE_OVERHANG_DEG}° por
-          defecto) — si el slider pide mas de lo seguro para esa longitud de onda, se
-          aplica menos (se avisa abajo). Longitud de onda minima {MIN_WAVELENGTH_MM}mm.
+          Cada costilla es una pieza solida INDEPENDIENTE (un corte/contour, no un
+          calado CNC): nace en y = 0 y no hay ninguna plancha de base que las una —
+          la base es la tela que ya esta puesta en la cama de impresion. Espesor de
+          costilla minimo {MIN_RIB_THICKNESS_MM}mm (se recorta si no entra en la
+          separacion pedida, se avisa abajo); separacion minima entre ejes{' '}
+          {MIN_SPACING_MM}mm; longitud de onda minima {MIN_WAVELENGTH_MM}mm. Al no
+          tener voladizo real (son paredes casi verticales, el perfil solo sube y
+          baja dentro de la pared) no hace falta recortar la amplitud por angulo —
+          el riesgo en este modo es la esbeltez (costillas muy altas y finas pueden
+          vibrar o desprenderse), reportada abajo.
         </p>
       </section>
 
@@ -75,8 +79,8 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
           />
         ))}
         <p className="hint">
-          "Facetas por onda" baja (1-3) da costillas angulosas bien marcadas; alta (8+) da
-          una onda suave.
+          "Muestras por onda" baja (2-4) da un perfil angular, de segmentos rectos
+          bien marcados; alta (12+) da una curva suave por costilla.
         </p>
         <div className="seg">
           <button
@@ -110,16 +114,26 @@ export function WaveFieldPanel({ result }: WaveFieldPanelProps) {
         <h3>Exportar</h3>
         <dl className="stats">
           <div>
-            <dt>Amplitud aplicada</dt>
+            <dt>Espesor de costilla aplicado</dt>
             <dd>
-              {result.appliedAmplitudeMm.toFixed(1)} mm
-              {result.amplitudeLimited ? ' (recortada)' : ''}
+              {result.appliedRibThicknessMm.toFixed(2)} mm
+              {result.thicknessLimited ? ' (recortado)' : ''}
             </dd>
           </div>
           <div>
-            <dt>Segmentos (U x V)</dt>
+            <dt>Costillas</dt>
             <dd>
-              {result.segmentsU} x {result.segmentsV}
+              {result.ribCount}
+              {result.segmentCount !== result.ribCount
+                ? ` (${result.segmentCount} piezas, algunas partidas por el contorno)`
+                : ''}
+            </dd>
+          </div>
+          <div>
+            <dt>Altura maxima</dt>
+            <dd>
+              {result.maxHeightMm.toFixed(1)} mm — esbeltez {result.maxAspectRatio.toFixed(1)}:1
+              {result.maxAspectRatio > 15 ? ' (alta, cuidado al imprimir)' : ''}
             </dd>
           </div>
           <div>

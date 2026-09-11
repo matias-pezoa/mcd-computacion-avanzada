@@ -1,15 +1,14 @@
 /**
- * Escena del modo Ondas: base de tela (plano) + panel corrugado (costillas
- * trigonometricas) + gizmos de atractores editables en el viewport.
+ * Escena del modo Ondas: base de tela (plano, solo referencia visual — ver
+ * waveField.ts sobre por que las costillas no incluyen su propia base) +
+ * peine de costillas independientes (contour) + gizmos de atractores
+ * editables en el viewport.
  *
- * El material usa `flatShading` para que la malla (que ya viene con
- * resolucion baja respecto de la longitud de onda, ver waveField.ts) se lea
- * como facetas/costillas en vez de una onda suavizada; ademas se dibujan las
- * aristas de las facetas (`<Edges>`) para que las costillas se vean nitidas
- * sin depender del angulo de luz. El panel NO proyecta sombra sobre si mismo
- * (`castShadow` desactivado aca): una superficie corrugada continua auto-
- * sombreandose genera "shadow acne" (ruido periodico falso, no es la
- * geometria) con el mapa de sombras compartido del Viewport.
+ * El material usa `flatShading` para que el perfil de cada costilla (que ya
+ * viene muestreado con resolucion baja respecto de la longitud de onda, ver
+ * waveField.ts) se lea como segmentos/facetas en vez de una curva suavizada;
+ * ademas se dibujan las aristas (`<Edges>`) para que se vean nitidas sin
+ * depender del angulo de luz.
  */
 import * as THREE from 'three'
 import { Edges } from '@react-three/drei'

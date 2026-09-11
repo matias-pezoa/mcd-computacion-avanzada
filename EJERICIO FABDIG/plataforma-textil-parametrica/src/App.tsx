@@ -88,7 +88,7 @@ export default function App() {
           {mode === 'volume' &&
             'Puas solidas y autosoportadas que emergen del plano (base de tela), sin solape entre si. Altura, radios, inclinacion y densidad segun el mapa de atractores. 1 u = 1 cm.'}
           {mode === 'wave' &&
-            'Panel corrugado: costillas trigonometricas radiales desde cada atractor, facetadas y con base plana fija. 1 u = 1 cm.'}
+            'Peine de costillas independientes (contour): cada una nace en y=0 sin plancha de base, con relieve trigonometrico radial desde cada atractor. 1 u = 1 cm.'}
           {mode === 'laser' && 'Modo de corte laser en preparacion.'}
         </p>
       </main>
