@@ -1,18 +1,27 @@
-name: tests
+name: analisis_sesion tests
 
 on:
   push:
+    paths:
+      - "analisis_sesion/**"
+      - ".github/workflows/analisis_sesion-tests.yml"
   pull_request:
+    paths:
+      - "analisis_sesion/**"
 
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: analisis_sesion
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: analisis_sesion/requirements-dev.txt
       - name: Instalar dependencias de prueba
         run: |
           pip install -r requirements-dev.txt

@@ -1,6 +1,6 @@
 # Análisis verbal y no verbal de sesiones
 
-![tests](https://github.com/OWNER/REPO/actions/workflows/tests.yml/badge.svg)
+![tests](https://github.com/matias-pezoa/mcd-computacion-avanzada/actions/workflows/analisis_sesion-tests.yml/badge.svg)
 
 Pipeline en Python que toma la grabación de una sesión (Senado TV, YouTube o un
 video local) y entrega:
@@ -33,8 +33,8 @@ tabla de oradores generados con una sesión sintética de prueba.
 ## 1. Instalación en Windows (una sola vez)
 
 ```powershell
-git clone https://github.com/OWNER/REPO.git
-cd REPO
+git clone https://github.com/matias-pezoa/mcd-computacion-avanzada.git
+cd mcd-computacion-avanzada/analisis_sesion
 
 # ffmpeg (para extraer audio y video)
 winget install Gyan.FFmpeg
@@ -232,7 +232,6 @@ python pipeline.py --sesion sintetica --desde-etapa diarizacion --sin-sentimient
 ├── .env.example         ← plantilla para el token de Hugging Face
 ├── docs/ejemplo/        ← reporte de ejemplo (sesión sintética)
 ├── tests/               ← sesión sintética + pytest
-├── .github/workflows/   ← pruebas automáticas en GitHub Actions
 └── etapas/
     ├── ingesta.py       descarga y extracción de audio/video
     ├── transcripcion.py faster-whisper con marcas por palabra
