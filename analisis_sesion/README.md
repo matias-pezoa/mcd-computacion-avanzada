@@ -23,6 +23,27 @@ La exportación a imágenes generativas todavía no está incluida: esta versió
 llega hasta los datos (`linea_tiempo.csv` / `.json`), que después se pueden
 conectar a ComfyUI o a MQTT.
 
+## Versión web (sin instalar nada)
+
+**https://matias-pezoa.github.io/mcd-computacion-avanzada/analisis_sesion/**
+
+La misma lógica portada a JavaScript ([`web/`](web/)) corre en el navegador
+con un video o audio local; el archivo no sale del computador:
+
+| Etapa | Versión Python | Versión web |
+|---|---|---|
+| Transcripción | faster-whisper | Whisper (transformers.js, WebGPU si hay) |
+| Separar oradores | pyannote | huellas WeSpeaker ResNet34 + agrupamiento aglomerativo |
+| Rostro y cuerpo | MediaPipe | MediaPipe web |
+| Voz | Praat (parselmouth) | YIN + intensidad RMS |
+| Verbal | spaCy (lematiza) + pysentimiento | sin lematizar, sin sentimiento |
+| Fuente | YouTube, Senado TV o archivo | solo archivo local |
+
+El reporte es interactivo (nombres editables, número de oradores ajustable,
+línea de tiempo con reproducción) y se descarga como CSV/JSON con las mismas
+columnas que la versión Python. La sesión completa se guarda como `.json` para
+reabrirla sin reprocesar.
+
 ![Reporte de ejemplo con una sesión sintética](docs/ejemplo/reporte.png)
 
 En [`docs/ejemplo/`](docs/ejemplo/) hay un reporte, una línea de tiempo y una
@@ -230,6 +251,7 @@ python pipeline.py --sesion sintetica --desde-etapa diarizacion --sin-sentimient
 ├── requirements.txt     ← dependencias completas
 ├── requirements-dev.txt ← dependencias mínimas para las pruebas
 ├── .env.example         ← plantilla para el token de Hugging Face
+├── index.html, web/     ← versión web (GitHub Pages)
 ├── docs/ejemplo/        ← reporte de ejemplo (sesión sintética)
 ├── tests/               ← sesión sintética + pytest
 └── etapas/
