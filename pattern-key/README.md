@@ -41,7 +41,7 @@ pattern-key/
 │   ├── camera.js         cámara (getUserMedia) y video local
 │   ├── detector.js       carga de OpenCV.js y mapa de similitud del rapport
 │   ├── mask.js           umbral, morfología, suavizado y persistencia
-│   ├── effects.js        efectos (fase 4)
+│   ├── effects.js        efectos y composición con la máscara
 │   ├── recorder.js       grabación con MediaRecorder (fase 5)
 │   └── synthetic.js      escena sintética de prueba
 ├── tools/
@@ -151,7 +151,7 @@ Medido con `evaluateSequence` sobre la escena sintética: 12 fps, ruido de senso
 - [x] **Fase 1:** interfaz, carga de rapport, cámara, canvas, render loop y vista ORIGINAL
 - [x] **Fase 2:** detección experimental, vista MASK y depuración de las señales A/B/C
 - [x] **Fase 3:** estabilización temporal (histéresis, persistencia, interpolación), sliders que se recuerdan, restablecer y atajos
-- [ ] **Fase 4:** efectos (Distortion, RGB Shift, Pixelation, Blur, Noise, Displacement)
+- [x] **Fase 4:** efectos (Distortion, RGB Shift, Pixelation, Blur, Noise, Displacement)
 - [ ] **Fase 5:** grabación (MediaRecorder)
 - [ ] **Fase 6:** optimización móvil y GitHub Pages
 

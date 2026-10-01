@@ -17,6 +17,7 @@ import { startCamera, startVideoFile, listCameras, stopCamera, cameraErrorMessag
 import { SyntheticScene } from "./synthetic.js";
 import { loadOpenCV, PatternDetector } from "./detector.js";
 import { MaskBuilder } from "./mask.js";
+import { EffectRenderer } from "./effects.js";
 
 // ---------- Referencias al DOM ----------
 const $ = (id) => document.getElementById(id);
@@ -61,6 +62,7 @@ const state = {
   masker: null,
   mask: null,           // última máscara calculada (Uint8, resolución CV)
   maskSize: [0, 0],
+  effects: new EffectRenderer(),
 };
 
 const CV_INTERVAL = 1000 / 12; // CV loop ≈ 12 fps (independiente del render)
@@ -85,11 +87,7 @@ function lock(el, locked = true) {
   if ("disabled" in el) el.disabled = locked;
 }
 
-// Fase 3: ORIGINAL | MASK + Sensibilidad, Suavizado y Persistencia.
-// El resto se desbloquea en fases posteriores.
-lock(ui.sliders.intensity);
-ui.viewSeg.querySelectorAll("button[data-view=effect], button[data-view=composite]").forEach((b) => (b.disabled = true));
-lock(ui.effectSelect);
+// Fase 4: todas las vistas y efectos. La grabación llega en la fase 5.
 lock(ui.recordBtn);
 
 // ==========================================================
@@ -352,6 +350,14 @@ function renderLoop(now) {
 
   if (state.view === "mask") {
     drawMaskView(w, h);
+  } else if (state.view === "effect") {
+    ctx.drawImage(renderEffect(src, w, h, now), 0, 0, w, h);
+  } else if (state.view === "composite") {
+    ctx.drawImage(src.drawable, 0, 0, w, h);
+    if (state.mask) {
+      renderEffect(src, w, h, now);
+      ctx.drawImage(state.effects.masked(state.masker), 0, 0, w, h);
+    }
   } else {
     ctx.drawImage(src.drawable, 0, 0, w, h);
   }
@@ -363,6 +369,11 @@ function renderLoop(now) {
     (t ? `
 CV ${d.width}×${d.height}  ${state.cvFps.toFixed(0)} fps  ${t.toFixed(0)} ms` +
          `  (ORB ${d.lastOrb?.good ?? 0}/${d.lastOrb?.keypoints ?? 0})` : "");
+}
+
+/** Efecto elegido sobre todo el frame (vista EFFECT, y base de COMPOSITE). */
+function renderEffect(src, w, h, now) {
+  return state.effects.render(src.drawable, w, h, ui.effectSelect.value, state.params.intensity, now / 1000);
 }
 
 /** Vista MASK: blanco = rapport detectado, negro = resto. */

@@ -9,7 +9,8 @@
      → estabilización temporal (Persistencia)
      → máscara 0..255 a resolución de análisis
 
-   La máscara se reescala al tamaño del video al componer, y el
+   La máscara se guarda en el canal alfa de dos canvas (anterior y
+   actual), se reescala al tamaño del video al componer, y el
    render loop interpola entre las dos últimas máscaras para que
    el borde no avance "a saltos" (el análisis va a ~12 fps, el
    video a 60).
@@ -128,11 +129,14 @@ export class MaskBuilder {
    */
   draw(ctx, w, h, now = performance.now()) {
     if (!this.w) return;
+    // prev·(1−f) + curr·f  (con "lighter" la suma es exacta, tanto
+    // sobre fondo negro como sobre un canvas transparente)
     const f = Math.min(1, (now - this.updatedAt) / this.interval);
     ctx.save();
     ctx.imageSmoothingEnabled = true; // reescalado bilineal = borde suave
-    ctx.globalAlpha = 1;
+    ctx.globalAlpha = 1 - f;
     ctx.drawImage(this.prevCanvas, 0, 0, w, h);
+    ctx.globalCompositeOperation = "lighter";
     ctx.globalAlpha = f;
     ctx.drawImage(this.currCanvas, 0, 0, w, h);
     ctx.restore();
@@ -150,11 +154,14 @@ export class MaskBuilder {
     return this.debugCanvas;
   }
 
+  // La máscara va en el canal alfa (blanco con opacidad = máscara):
+  // sobre negro se ve igual que en gris, y sirve para recortar el
+  // efecto con "destination-in" en la vista COMPOSITE.
   #paint(canvas, mask) {
     const d = this.imageData.data;
     for (let i = 0, j = 0; i < mask.length; i++, j += 4) {
-      d[j] = d[j + 1] = d[j + 2] = mask[i];
-      d[j + 3] = 255;
+      d[j] = d[j + 1] = d[j + 2] = 255;
+      d[j + 3] = mask[i];
     }
     canvas.getContext("2d").putImageData(this.imageData, 0, 0);
   }
