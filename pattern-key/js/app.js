@@ -13,11 +13,14 @@
          analiza un frame reducido y actualiza la máscara
    ========================================================== */
 
-import { startCamera, startVideoFile, listCameras, stopCamera, cameraErrorMessage } from "./camera.js";
-import { SyntheticScene } from "./synthetic.js";
-import { loadOpenCV, PatternDetector } from "./detector.js";
-import { MaskBuilder } from "./mask.js";
-import { EffectRenderer } from "./effects.js";
+// ?v=N evita que el navegador mezcle módulos nuevos con versiones
+// viejas en caché (GitHub Pages cachea 10 min). Súbelo en cada deploy
+// que cambie los .js, junto con el de index.html.
+import { startCamera, startVideoFile, listCameras, stopCamera, cameraErrorMessage } from "./camera.js?v=4";
+import { SyntheticScene } from "./synthetic.js?v=4";
+import { loadOpenCV, PatternDetector } from "./detector.js?v=4";
+import { MaskBuilder } from "./mask.js?v=4";
+import { EffectRenderer } from "./effects.js?v=4";
 
 // ---------- Referencias al DOM ----------
 const $ = (id) => document.getElementById(id);
