@@ -322,7 +322,6 @@ body.visitante.operador .menu-dock{display:flex}
           <button id="btn-png-todos">Descargar todos los mapas</button>
           <button id="btn-datos-sesion">Exportar datos de la sesión</button>
           <button id="btn-trayectoria-sesion">Exportar trayectoria de la mirada (CSV)</button>
-          <button id="btn-gcode-sesion">Descargar G-code de tu figura</button>
           <button id="btn-3mf-sesion">Descargar figura 3D (3MF)</button>
           <button id="btn-stl-sesion">Descargar figura 3D (STL)</button>
           <button id="btn-imprimir">Imprimir informe</button>
@@ -440,33 +439,24 @@ body.visitante.operador .menu-dock{display:flex}
 
   <div class="menu-item">
     <button class="menu-trigger" type="button" data-target="p-fab" aria-expanded="false" aria-controls="p-fab">
-      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">G-code</span>
+      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">Tubo 3D</span>
     </button>
     <div class="menu-panel" id="p-fab" hidden>
       <div class="grid">
         <label>Visita<select id="fab-sesion"></select></label>
-        <label>Intensidad de la deformación (0–1)<input type="number" id="fab-drama" min="0" max="1" step="0.05"></label>
-        <label>Cuánto sigue a la mirada (0–1)<input type="number" id="fab-sway" min="0" max="1" step="0.05"></label>
-        <label>Alto (mm)<input type="number" id="fab-height" min="20" max="300" step="1"></label>
-        <label>Radio base (mm)<input type="number" id="fab-radius" min="8" max="100" step="1"></label>
-        <label>Ángulo máximo de voladizo (°)<input type="number" id="fab-maxangle" min="20" max="70" step="1"></label>
-        <label>Altura de capa (mm)<input type="number" id="fab-layer" min="0.08" max="0.4" step="0.02"></label>
-        <label>Boquilla (mm)<input type="number" id="fab-nozzle" min="0.2" max="1.2" step="0.05"></label>
-        <label>Filamento (mm)<input type="number" id="fab-filament" min="1.75" max="2.85" step="0.05"></label>
-        <label>Temperatura boquilla (°C)<input type="number" id="fab-temp" min="170" max="300" step="5"></label>
-        <label>Temperatura cama (°C)<input type="number" id="fab-bedtemp" min="0" max="120" step="5"></label>
-        <label>Velocidad de impresión (mm/s)<input type="number" id="fab-speed" min="5" max="150" step="1"></label>
-        <label>Cama X (mm)<input type="number" id="fab-bedx" min="80" max="500" step="1"></label>
-        <label>Cama Y (mm)<input type="number" id="fab-bedy" min="80" max="500" step="1"></label>
+        <label>Ancho (mm)<input type="number" id="fab-width" min="30" max="250" step="1"></label>
+        <label>Alto (mm)<input type="number" id="fab-height" min="20" max="250" step="1"></label>
+        <label>Grosor mínimo del tubo, radio (mm)<input type="number" id="fab-rmin" min="1" max="30" step="0.5"></label>
+        <label>Grosor máximo del tubo, radio (mm)<input type="number" id="fab-rmax" min="2" max="40" step="0.5"></label>
+        <label>Suavizado de la trayectoria (s)<input type="number" id="fab-smooth" min="0.2" max="5" step="0.1"></label>
       </div>
       <canvas id="fab-preview" class="figura-preview" width="640" height="640" aria-label="Vista previa de la figura"></canvas>
       <div class="panel-acciones">
         <button id="btn-fab-preview">Vista previa</button>
-        <button id="btn-gcode">Exportar G-code</button>
         <button id="btn-3mf">Exportar 3MF</button>
         <button id="btn-stl">Exportar STL</button>
       </div>
-      <p class="hint">La figura crece con el tiempo de la visita: cada capa es un instante. La mirada mueve el centro de la capa (la figura se inclina hacia donde miraste) y su velocidad la llena de pliegues; el desgaste de la imagen que estabas viendo hunde el contorno; cada imagen que no provocó respuesta en la piel la contrae y la tuerce. El G-code imprime en espiral continua (modo jarrón, una sola pared) tras un fondo macizo, para Marlin, en coordenadas absolutas. Revisa temperaturas y tamaño de cama antes de imprimir y mira el archivo en la vista previa de tu slicer.</p>
+      <p class="hint">Un solo tubo continuo que recorre la mirada: x e y son la posición de la mirada sobre la imagen y z es la señal del sensor (más activación, más arriba). Donde la mirada se detuvo el tubo engorda; donde saltó rápido, adelgaza; si la zona mirada estaba gastada, también adelgaza. Los puntos más bajos se aplanan para apoyarse en la cama. Es una figura con arcos y voladizos: lamínala en tu slicer con soportes (los de árbol funcionan bien).</p>
     </div>
   </div>
 </nav>
@@ -514,9 +504,8 @@ const DEFAULT_CFG = {
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
-  // figura para impresión 3D (mm): forma y trayectoria de la boquilla salen de la visita
-  fabHeight: 120, fabRadius: 30, fabDrama: 0.8, fabSway: 0.6, fabMaxAngle: 50,
-  fabLayer: 0.2, fabNozzle: 0.4, fabFilament: 1.75, fabTemp: 210, fabBedTemp: 60, fabSpeed: 25, fabBedX: 220, fabBedY: 220,
+  // figura para impresión 3D (mm): un tubo que recorre la mirada (x, y) a la altura que marca el sensor (z)
+  fabWidth: 90, fabHeight: 120, fabRMin: 4, fabRMax: 16, fabSmooth: 1.2,
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
@@ -541,6 +530,7 @@ function trimStore(){
   for(const s of STORE.sessions){
     if(JSON.stringify(STORE).length < 4e6) return;
     for(const i of s.items) delete i.trayectoria;
+    delete s.senal;
   }
 }
 function persist(){
@@ -946,6 +936,9 @@ function closeSession(reason){
   if(reason === 'insensibilidad') S.closeAt = ev[ev.length - CFG.missWindow].n;
   for(const it of S.items) if(it.responded === null) it.unevaluated = true;
   S.wearEnd = {}; for(const id in S.wearStart) S.wearEnd[id] = meanOf(gridsFor(id).wear);
+  // señal del sensor durante el feed, a 10 Hz: [t desde el inicio del feed, valor]
+  S.signal = []; let lastSigT = -1;
+  for(const x of SIG.buf){ if(x.t < S.feedStartT || x.t > tEnd) continue; const t = x.t - S.feedStartT; if(t - lastSigT >= 0.1){ S.signal.push([+t.toFixed(2), +x.v.toFixed(4)]); lastSigT = t; } }
   STORE.visitors++; S.visitor = STORE.visitors;
   STORE.sessions.push(summary(S)); if(STORE.sessions.length > 500) STORE.sessions.shift();
   trimStore();
@@ -964,7 +957,7 @@ function summary(s){
     motivo: s.reason, cierreEn: s.closeAt || null, cfg: s.cfg,
     desgaste: Object.keys(s.wearStart).map(id => ({imagen: id, antes: +s.wearStart[id].toFixed(4), despues: +s.wearEnd[id].toFixed(4)})),
     items: s.items.map(i => ({n: i.n, imagen: i.id, t: +(i.onset - s.feedStartT).toFixed(3), amplitud: i.amp, respondio: i.responded,
-      permanencia: i.dwell, miradaEnImagen: +i.gazeOn.toFixed(2), miradaFuera: +i.gazeOff.toFixed(2), desgasteExtra: !!i.extraApplied, sinEvaluar: !!i.unevaluated, trayectoria: i.path}))};
+      permanencia: i.dwell, miradaEnImagen: +i.gazeOn.toFixed(2), miradaFuera: +i.gazeOff.toFixed(2), desgasteExtra: !!i.extraApplied, sinEvaluar: !!i.unevaluated, trayectoria: i.path})), senal: s.signal || []};
 }
 
 /* ============================================================
@@ -1011,7 +1004,7 @@ function showReport(){
   const ids = Object.keys(s.wearStart);
   const added = ids.reduce((p, id) => p + (s.wearEnd[id] - s.wearStart[id]), 0) / Math.max(1, ids.length);
   $('#inf-desgaste').textContent = `Las ${ids.length} imágenes que viste quedaron en promedio ${(added * 100).toFixed(1)} puntos más gastadas, justo en las zonas que miraste. Quien venga después las verá así. Ese desgaste no se puede borrar.`;
-  try{ drawForm($('#inf-figura'), formLayers(summary(s))); }catch(e){ log('Vista previa de la figura: ' + e.message, 'aviso'); }
+  try{ drawPipe($('#inf-figura'), pipeForm(summary(s))); }catch(e){ log('Vista previa de la figura: ' + e.message, 'aviso'); }
   const bb = $('#btn-borrar'); bb.disabled = false; bb.textContent = 'Borrar mi registro';
   drawCurve(s); buildMaps(s);
 }
@@ -1246,7 +1239,6 @@ function trajectoryCSV(sessions){
 $('#btn-trayectorias').addEventListener('click', () => download('lo-que-queda-trayectorias.csv', trajectoryCSV(STORE.sessions), 'text/csv'));
 $('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; if(!s) return; download(`lo-que-queda-trayectoria-${s.visitor}.csv`, trajectoryCSV([summary(s)]), 'text/csv'); });
 // la figura de esta visita: G-code (trayectoria de la boquilla) y STL de la misma forma
-$('#btn-gcode-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'gcode'); });
 $('#btn-stl-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'stl'); });
 $('#btn-3mf-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), '3mf'); });
 $('#btn-acumulados').addEventListener('click', () => {
@@ -1263,173 +1255,125 @@ function sampleGrid(a, u, v){
   const top = a[y0 * GW + x0] * (1 - fx) + a[y0 * GW + x1] * fx, bot = a[y1 * GW + x0] * (1 - fx) + a[y1 * GW + x1] * fx;
   return top * (1 - fy) + bot * fy;
 }
-// La visita se vuelve una pila de capas. Cada capa es un instante de la visita y su contorno es una curva cerrada
-// r(θ) alrededor de un centro (cx, cy):
-//   · centro       ← la mirada suavizada en ese instante (la figura se inclina hacia donde se miró)
-//   · pliegues     ← la velocidad de la mirada (mirada inquieta = más pliegues y más profundos)
-//   · hundimientos ← el desgaste de la imagen vista, leído de arriba abajo mientras se la miraba
-//   · contracción y torsión ← cada imagen que no provocó respuesta en la piel; la respuesta la hincha
-// Después se suaviza en altura y se limita el voladizo para que se pueda imprimir sin soportes.
-const FORM_NA = 180;
-function formLayers(sess){
-  const items = (sess.items || []).filter(i => i.imagen != null);
-  if(!items.length) throw new Error('La visita no tiene imágenes vistas.');
-  const D = CFG.fabDrama, R = CFG.fabRadius, lh = CFG.fabLayer, nL = Math.max(10, Math.round(CFG.fabHeight / lh)), na = FORM_NA;
-  const segs = []; let T = 0;
-  for(const it of items){ const d = Math.max(0.5, it.permanencia || 3); segs.push({it, t0: T, d, W: gridsFor(it.imagen).wear}); T += d; }
-  // mirada: puntos válidos de toda la visita, en el tiempo absoluto del feed
-  const pts = []; for(const it of items) for(const q of it.trayectoria || []) if(q[1] !== null) pts.push(q);
-  const sig = 0.6;
-  const gazeAt = ta => {
-    let sw = 0, sx = 0, sy = 0, sp = 0, ns = 0, prev = null;
-    for(const q of pts){
-      if(q[0] < ta - 3 * sig) { prev = q; continue; } if(q[0] > ta + 3 * sig) break;
-      const w = Math.exp(-((q[0] - ta) ** 2) / (2 * sig * sig)); sw += w; sx += w * q[1]; sy += w * q[2];
-      if(prev && q[0] > prev[0]) { sp += Math.hypot(q[1] - prev[1], q[2] - prev[2]) / (q[0] - prev[0]); ns++; }
-      prev = q;
-    }
-    return sw > 0 ? {x: sx / sw, y: sy / sw, v: ns ? sp / ns : 0} : null;
-  };
-  const harmPhase = [...Array(10)].map((_, h) => h * 2.399);   // fases fijas (ángulo áureo) para que los pliegues no se alineen
-  const raw = []; let lastGaze = {x: 0.5, y: 0.5, v: 0}, twistBase = 0, k = 0;
-  for(let i = 0; i < nL; i++){
-    const tau = (i + 0.5) / nL * T;
-    while(k < segs.length - 1 && tau > segs[k].t0 + segs[k].d){ if(segs[k].it.respondio === false) twistBase += 0.45 * D; k++; }
-    const sg = segs[k], it = sg.it, p = clamp((tau - sg.t0) / sg.d, 0, 1);
-    const g = gazeAt((it.t || 0) + p * sg.d) || lastGaze; lastGaze = g;
-    const twist = twistBase + (it.respondio === false ? 0.45 * D * p : 0);
-    const meanW = meanOf(sg.W);
-    let base = R * (1 - 0.45 * D * meanW);
-    if(it.respondio === false) base *= 1 - 0.3 * D;
-    else if(it.respondio) base *= 1 + 0.25 * D * clamp((it.amplitud || 0) * 5, 0, 1);
-    const sp = clamp(g.v / 1.2, 0, 1), A = D * (0.08 + 0.4 * sp), fc = 2 + 6 * sp;
-    const r = new Float32Array(na);
-    for(let a = 0; a < na; a++){
-      const th = a / na * 2 * Math.PI, tt = th - twist, f = ((tt / (2 * Math.PI)) % 1 + 1) % 1;
-      let hs = 0, hw = 0;
-      for(let h = 2; h <= 9; h++){ const w = Math.exp(-((h - fc) ** 2) / 2); hs += w * Math.sin(h * tt + harmPhase[h]); hw += w; }
-      const wear = sampleGrid(sg.W, 1 - Math.abs(2 * f - 1), p);
-      r[a] = Math.max(3, base * (1 + A * hs / hw) * (1 - 0.6 * D * wear));
-    }
-    raw.push({r, cx: (g.x - 0.5) * 2 * R * CFG.fabSway, cy: (0.5 - g.y) * 2 * R * CFG.fabSway});
-  }
-  // suavizado gaussiano en altura (≈ 1,5 mm)
-  const sz = Math.max(1.5, 1.5 / lh), rad = Math.ceil(sz * 2.5), L = [];
-  for(let i = 0; i < nL; i++){
-    const r = new Float32Array(na); let cx = 0, cy = 0, ws = 0;
-    for(let j = Math.max(0, i - rad); j <= Math.min(nL - 1, i + rad); j++){
-      const w = Math.exp(-((j - i) ** 2) / (2 * sz * sz)); ws += w; cx += w * raw[j].cx; cy += w * raw[j].cy;
-      for(let a = 0; a < na; a++) r[a] += w * raw[j].r[a];
-    }
-    for(let a = 0; a < na; a++) r[a] /= ws;
-    L.push({z: (i + 1) * lh, cx: cx / ws, cy: cy / ws, r});
-  }
-  // voladizo: cada punto puede salirse de la capa anterior como máximo lh · tan(ángulo)
-  const step = lh * Math.tan(clamp(CFG.fabMaxAngle, 10, 75) * Math.PI / 180);
-  for(let i = 1; i < nL; i++){
-    const P = L[i - 1], C = L[i];
-    const dx = C.cx - P.cx, dy = C.cy - P.cy, dc = Math.hypot(dx, dy), mc = step * 0.5;
-    if(dc > mc){ C.cx = P.cx + dx / dc * mc; C.cy = P.cy + dy / dc * mc; }
-    for(let a = 0; a < na; a++){
-      const th = a / na * 2 * Math.PI, proj = (C.cx - P.cx) * Math.cos(th) + (C.cy - P.cy) * Math.sin(th);
-      C.r[a] = Math.max(3, clamp(C.r[a] + proj, P.r[a] - step, P.r[a] + step) - proj);
-    }
-  }
-  return {layers: L, na, segs: segs.length, seconds: T};
+// La visita se vuelve un tubo continuo (pipe):
+//   · recorrido x, y ← la trayectoria de la mirada sobre la imagen (proporción 9:16)
+//   · altura z       ← la señal del sensor de piel en ese instante, normalizada en la visita
+//   · grosor         ← la quietud de la mirada (fijación = engorda, salto rápido = adelgaza) y lo que queda de la zona mirada
+function gaussSmooth(a, sig){
+  if(sig < 0.5) return a.slice();
+  const n = a.length, out = new Float64Array(n), r = Math.ceil(sig * 3), w = [];
+  for(let k = -r; k <= r; k++) w.push(Math.exp(-(k * k) / (2 * sig * sig)));
+  for(let i = 0; i < n; i++){ let s = 0, ws = 0; for(let k = -r; k <= r; k++){ const j = i + k; if(j < 0 || j >= n) continue; s += a[j] * w[k + r]; ws += w[k + r]; } out[i] = s / ws; }
+  return out;
 }
-const formPoint = (Lr, a, na, scale = 1) => { const th = a / na * 2 * Math.PI, r = Lr.r[a % na] * scale; return [Lr.cx + r * Math.cos(th), Lr.cy + r * Math.sin(th)]; };
-
-// G-code (Marlin, absoluto): fondo macizo en anillos concéntricos y luego una espiral continua de una sola pared.
-function formGcode(form, title){
-  const {layers: L, na} = form, lh = CFG.fabLayer, w = CFG.fabNozzle * 1.1, fil = Math.PI * (CFG.fabFilament / 2) ** 2;
-  let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
-  for(const l of L) for(let a = 0; a < na; a++){ const [x, y] = formPoint(l, a, na); minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
-  const ox = CFG.fabBedX / 2 - (minx + maxx) / 2, oy = CFG.fabBedY / 2 - (miny + maxy) / 2;
-  if(maxx - minx > CFG.fabBedX - 10 || maxy - miny > CFG.fabBedY - 10) throw new Error(`La figura (${(maxx - minx).toFixed(0)} × ${(maxy - miny).toFixed(0)} mm) no cabe en la cama.`);
-  const out = [], f3 = v => v.toFixed(3), f2 = v => v.toFixed(2);
-  let E = 0, px = null, py = null, pz = 0;
-  const F = mms => Math.round(mms * 60);
-  const travel = (x, y, z) => { out.push(`G0 X${f2(x + ox)} Y${f2(y + oy)}${z != null ? ' Z' + f3(z) : ''} F${F(120)}`); px = x; py = y; if(z != null) pz = z; };
-  const extrude = (x, y, z, h, mms, k = 1) => {
-    E += Math.hypot(x - px, y - py) * w * h / fil * k;
-    out.push(`G1 X${f2(x + ox)} Y${f2(y + oy)}${z != null ? ' Z' + f3(z) : ''} E${E.toFixed(5)} F${F(mms)}`); px = x; py = y; if(z != null) pz = z;
-  };
-  out.push(`; Lo que queda: ${title}`, `; ${L.length} capas de ${lh} mm, ${f2(maxx - minx)} x ${f2(maxy - miny)} x ${f2(L[L.length - 1].z)} mm`,
-    `; boquilla ${CFG.fabNozzle} mm, filamento ${CFG.fabFilament} mm, ${CFG.fabTemp} C / cama ${CFG.fabBedTemp} C. Revisar antes de imprimir.`,
-    'G21', 'G90', 'M82', `M140 S${CFG.fabBedTemp}`, `M104 S${CFG.fabTemp}`, 'G28', `M190 S${CFG.fabBedTemp}`, `M109 S${CFG.fabTemp}`,
-    'G92 E0', 'G1 Z2 F600',
-    '; línea de purga', `G0 X5 Y10 Z0.3 F${F(120)}`, `G1 X5 Y${f2(Math.min(150, CFG.fabBedY - 20))} E12 F${F(20)}`, 'G92 E0', 'G1 Z2 F600');
-  px = 5; py = Math.min(150, CFG.fabBedY - 20);
-  const bottomN = Math.max(3, Math.round(0.8 / lh));
-  // fondo: anillos que van del contorno hacia el centro
-  for(let b = 0; b < bottomN; b++){
-    const l = L[b], z = l.z, sp = b === 0 ? 15 : CFG.fabSpeed * 0.8;
-    out.push(`; fondo, capa ${b + 1}`);
-    if(b === 1) out.push('M106 S255');
-    for(let ring = 0; ; ring++){
-      const off = ring * w; let any = false;
-      const pt = a => { const r = l.r[a % na] - off, th = a / na * 2 * Math.PI; return r >= w * 0.5 ? [l.cx + r * Math.cos(th), l.cy + r * Math.sin(th)] : null; };
-      let started = false;
-      for(let a = 0; a <= na; a++){
-        const q = pt(a);
-        if(!q){ started = false; continue; }
-        any = true;
-        if(!started){ travel(q[0], q[1], z); started = true; } else extrude(q[0], q[1], null, lh, sp, b === 0 ? 1.15 : 1);
-      }
-      if(!any) break;
-    }
+function pipeForm(sess){
+  const pts = [];
+  for(const it of sess.items || []) for(const q of it.trayectoria || []) if(q[1] !== null) pts.push({t: q[0], x: q[1], y: q[2], img: it.imagen});
+  if(pts.length < 20) throw new Error('la visita no tiene trayectoria de mirada suficiente.');
+  pts.sort((a, b) => a.t - b.t);
+  const sig = (sess.senal || []).slice().sort((a, b) => a[0] - b[0]);
+  if(sig.length < 2) throw new Error('la visita no tiene datos del sensor guardados.');
+  // remuestreo uniforme en el tiempo (20 Hz): la mirada se interpola por encima de los tramos en que salió de la imagen
+  const dt = 0.05, t0 = pts[0].t, t1 = pts[pts.length - 1].t, n = Math.max(2, Math.floor((t1 - t0) / dt) + 1);
+  const X = new Float64Array(n), Y = new Float64Array(n), V = new Float64Array(n), IMG = [];
+  let a = 0, b = 0;
+  for(let i = 0; i < n; i++){
+    const t = t0 + i * dt;
+    while(a < pts.length - 2 && pts[a + 1].t <= t) a++;
+    const p = pts[a], q = pts[Math.min(a + 1, pts.length - 1)], f = q.t > p.t ? clamp((t - p.t) / (q.t - p.t), 0, 1) : 0;
+    X[i] = p.x + (q.x - p.x) * f; Y[i] = p.y + (q.y - p.y) * f; IMG.push(f < 0.5 ? p.img : q.img);
+    while(b < sig.length - 2 && sig[b + 1][0] <= t) b++;
+    const u = sig[b], w = sig[Math.min(b + 1, sig.length - 1)], g = w[0] > u[0] ? clamp((t - u[0]) / (w[0] - u[0]), 0, 1) : 0;
+    V[i] = u[1] + (w[1] - u[1]) * g;
   }
-  // espiral: la Z sube de forma continua a lo largo de cada vuelta
-  out.push('; espiral (modo jarrón)');
-  const s0 = L[bottomN - 1], p0 = formPoint(s0, 0, na); travel(p0[0], p0[1], s0.z);
-  for(let i = bottomN; i < L.length; i++){
-    const l = L[i], prev = L[i - 1];
-    for(let a = 1; a <= na; a++){
-      const f = a / na, q = formPoint(l, a, na), z = prev.z + (l.z - prev.z) * f;
-      extrude(q[0], q[1], z, lh, CFG.fabSpeed);
-    }
+  const S = CFG.fabSmooth / dt, xs = gaussSmooth(X, S), ys = gaussSmooth(Y, S), vs = gaussSmooth(V, S);
+  // quietud de la mirada: velocidad (suavizada a medias) normalizada por su percentil 90
+  const xq = gaussSmooth(X, S / 2), yq = gaussSmooth(Y, S / 2), sp = new Float64Array(n);
+  for(let i = 1; i < n; i++) sp[i] = Math.hypot(xq[i] - xq[i - 1], yq[i] - yq[i - 1]) / dt; sp[0] = sp[1];
+  const p90 = [...sp].sort((p, q) => p - q)[Math.floor(n * 0.9)] || 1;
+  let vmin = Infinity, vmax = -Infinity; for(const v of vs){ vmin = Math.min(vmin, v); vmax = Math.max(vmax, v); }
+  const vr = vmax - vmin > 1e-4 ? vmax - vmin : 1;
+  const W = CFG.fabWidth, D = W * 16 / 9, H = CFG.fabHeight, r0 = CFG.fabRMin, r1 = Math.max(r0, CFG.fabRMax);
+  const R = new Float64Array(n);
+  for(let i = 0; i < n; i++){
+    const calm = 1 - clamp(sp[i] / p90, 0, 1), wear = sampleGrid(gridsFor(IMG[i]).wear, clamp(xs[i], 0, 1), clamp(ys[i], 0, 1));
+    R[i] = calm ** 1.5 * (1 - 0.5 * wear);
   }
-  out.push('; fin', 'G91', 'G1 E-2 F2400', 'G1 Z10 F600', 'G90', `G0 X${f2(Math.min(CFG.fabBedX - 5, 10))} Y${f2(CFG.fabBedY - 10)} F${F(120)}`,
-    'M106 S0', 'M104 S0', 'M140 S0', 'M84', `; filamento usado: ${(E / 1000).toFixed(2)} m`);
-  return {text: out.join('\n') + '\n', meters: E / 1000};
+  // el grosor usa todo el rango de la visita: su mirada más quieta da el radio máximo y la más inquieta el mínimo
+  const rq = gaussSmooth(R, S / 3); let qmin = Infinity, qmax = -Infinity; for(const q of rq){ qmin = Math.min(qmin, q); qmax = Math.max(qmax, q); }
+  const rs = rq.map(q => r0 + (r1 - r0) * (qmax - qmin > 1e-6 ? (q - qmin) / (qmax - qmin) : 0.5));
+  // el recorrido de la mirada se escala, sin deformarlo, para llenar la huella (ancho × ancho · 16/9)
+  let xa = Infinity, xb = -Infinity, ya = Infinity, yb = -Infinity;
+  for(let i = 0; i < n; i++){ xa = Math.min(xa, xs[i]); xb = Math.max(xb, xs[i]); ya = Math.min(ya, ys[i]); yb = Math.max(yb, ys[i]); }
+  const fit = Math.min((W - 2 * r1) / Math.max(1e-3, xb - xa), (D - 2 * r1) / Math.max(1e-3, (yb - ya) * 16 / 9));
+  const P = [];
+  for(let i = 0; i < n; i++) P.push([r1 + (xs[i] - xa) * fit, r1 + (yb - ys[i]) * 16 / 9 * fit, r1 + (vs[i] - vmin) / vr * (H - 2 * r1)]);
+  // remuestreo por longitud de arco para un tubo parejo
+  const cum = [0]; for(let i = 1; i < n; i++) cum.push(cum[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1], P[i][2] - P[i - 1][2]));
+  const L = cum[n - 1]; if(L < 5) throw new Error('la mirada casi no se movió: no hay recorrido para el tubo.');
+  const step = Math.max(0.8, L / 2500), m = Math.max(2, Math.ceil(L / step) + 1), path = [], rad = [];
+  let k = 0;
+  for(let j = 0; j < m; j++){
+    const d = Math.min(L, j * L / (m - 1));
+    while(k < n - 2 && cum[k + 1] < d) k++;
+    const f = cum[k + 1] > cum[k] ? (d - cum[k]) / (cum[k + 1] - cum[k]) : 0;
+    path.push([0, 1, 2].map(c => P[k][c] + (P[k + 1][c] - P[k][c]) * f)); rad.push(rs[k] + (rs[k + 1] - rs[k]) * f);
+  }
+  return {path, rad, length: L, seconds: t1 - t0};
 }
-// STL de la misma forma (sólido cerrado): para ver la figura en un visor o imprimirla en modo jarrón desde el slicer.
-function formTriangles(form){
-  const {layers: L, na} = form, tris = [], every = Math.max(1, Math.round(0.4 / CFG.fabLayer));
-  const add = (a, b, c, n) => {
-    const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
-    const cr = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
-    tris.push(cr[0]*n[0] + cr[1]*n[1] + cr[2]*n[2] >= 0 ? [n, a, b, c] : [n, a, c, b]);
-  };
-  const rings = [{l: L[0], z: 0}];
-  for(let i = 0; i < L.length; i += every) rings.push({l: L[i], z: L[i].z});
-  if(rings[rings.length - 1].l !== L[L.length - 1]) rings.push({l: L[L.length - 1], z: L[L.length - 1].z});
-  const V = rings.map(({l, z}) => [...Array(na)].map((_, a) => { const [x, y] = formPoint(l, a, na); return [x, y, z]; }));
-  for(let j = 0; j < V.length - 1; j++) for(let a = 0; a < na; a++){
-    const a1 = (a + 1) % na, th = (a + 0.5) / na * 2 * Math.PI, n = [Math.cos(th), Math.sin(th), 0];
-    add(V[j][a], V[j][a1], V[j + 1][a1], n); add(V[j][a], V[j + 1][a1], V[j + 1][a], n);
+// Malla cerrada del tubo: anillos con marcos que minimizan la torsión (doble reflexión), tapas redondas
+// y los puntos más bajos aplanados para que la figura se apoye en la cama.
+function pipeTriangles(form){
+  const {path: P, rad: R} = form, m = P.length, ns = 28, tris = [];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const norm = a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+  const T = P.map((_, i) => norm(sub(P[Math.min(m - 1, i + 1)], P[Math.max(0, i - 1)])));
+  let N = norm(cross(T[0], Math.abs(T[0][2]) < 0.9 ? [0, 0, 1] : [1, 0, 0]));
+  const Ns = [N];
+  for(let i = 0; i < m - 1; i++){
+    const v1 = sub(P[i + 1], P[i]), c1 = dot(v1, v1) || 1e-9;
+    const rL = sub(Ns[i], v1.map(x => x * 2 / c1 * dot(v1, Ns[i]))), tL = sub(T[i], v1.map(x => x * 2 / c1 * dot(v1, T[i])));
+    const v2 = sub(T[i + 1], tL), c2 = dot(v2, v2) || 1e-9;
+    Ns.push(norm(sub(rL, v2.map(x => x * 2 / c2 * dot(v2, rL)))));
   }
-  const b = rings[0].l, t = rings[rings.length - 1].l, top = V.length - 1;
-  for(let a = 0; a < na; a++){
-    const a1 = (a + 1) % na;
-    add([b.cx, b.cy, 0], V[0][a], V[0][a1], [0, 0, -1]);
-    add([t.cx, t.cy, rings[top].z], V[top][a], V[top][a1], [0, 0, 1]);
+  // anillos: tapa inicial (de la punta hacia afuera), cuerpo, tapa final
+  const rings = [], cap = 7;
+  for(let c = cap - 1; c >= 1; c--){ const ph = c / cap * Math.PI / 2; rings.push({c: sub(P[0], T[0].map(x => x * R[0] * Math.sin(ph))), r: R[0] * Math.cos(ph), i: 0}); }
+  for(let i = 0; i < m; i++) rings.push({c: P[i], r: R[i], i});
+  for(let c = 1; c < cap; c++){ const ph = c / cap * Math.PI / 2; rings.push({c: P[m - 1].map((x, k) => x + T[m - 1][k] * R[m - 1] * Math.sin(ph)), r: R[m - 1] * Math.cos(ph), i: m - 1}); }
+  const tip0 = sub(P[0], T[0].map(x => x * R[0])), tip1 = P[m - 1].map((x, k) => x + T[m - 1][k] * R[m - 1]);
+  const V = rings.map(g => { const n = Ns[g.i], bn = cross(T[g.i], n); return [...Array(ns)].map((_, a) => { const th = a / ns * 2 * Math.PI, c = Math.cos(th), s = Math.sin(th); return [0, 1, 2].map(k => g.c[k] + g.r * (c * n[k] + s * bn[k])); }); });
+  // aplanado de la base
+  let zmin = Infinity; for(const ring of V) for(const v of ring) zmin = Math.min(zmin, v[2]); zmin = Math.min(zmin, tip0[2], tip1[2]);
+  const floor = zmin + Math.min(2, CFG.fabRMin * 0.6);
+  const flat = v => [v[0], v[1], Math.max(v[2], floor) - floor];
+  // orden fijo de los vértices: con el marco (T, N, B = T × N) cada triángulo queda antihorario visto desde afuera,
+  // también donde el tubo se cruza consigo mismo o se dobla fuerte
+  const add = (a, b, c) => { const A = flat(a), B = flat(b), C = flat(c); tris.push([norm(cross(sub(B, A), sub(C, A))), A, B, C]); };
+  for(let j = 0; j < V.length - 1; j++) for(let a = 0; a < ns; a++){
+    const a1 = (a + 1) % ns;
+    add(V[j][a], V[j][a1], V[j + 1][a1]); add(V[j][a], V[j + 1][a1], V[j + 1][a]);
   }
+  const last = V.length - 1;
+  for(let a = 0; a < ns; a++){ const a1 = (a + 1) % ns; add(tip0, V[0][a1], V[0][a]); add(tip1, V[last][a], V[last][a1]); }
   return tris;
 }
-// vista previa isométrica: una línea por cada pocas capas
-function drawForm(canvas, form){
-  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, {layers: L, na} = form;
+// vista previa isométrica: el tubo dibujado de atrás hacia adelante, con sombreado según la altura
+function drawPipe(canvas, form){
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, {path: P, rad: R} = form;
   const iso = (x, y, z) => [(x - y) * 0.866, (x + y) * 0.5 - z];
-  let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
-  for(const l of L) for(let a = 0; a < na; a += 6){ const [x, y] = formPoint(l, a, na), [u, v] = iso(x, y, l.z); mnx = Math.min(mnx, u); mxx = Math.max(mxx, u); mny = Math.min(mny, v); mxy = Math.max(mxy, v); }
-  const sc = 0.86 * Math.min(W / (mxx - mnx), H / (mxy - mny)), ox = W / 2 - sc * (mnx + mxx) / 2, oy = H / 2 - sc * (mny + mxy) / 2;
-  g.fillStyle = '#060606'; g.fillRect(0, 0, W, H); g.lineWidth = 1;
-  const every = Math.max(1, Math.round(L.length / 90));
-  for(let i = 0; i < L.length; i += every){
-    const l = L[i]; g.strokeStyle = `rgba(193,255,114,${0.25 + 0.6 * i / L.length})`; g.beginPath();
-    for(let a = 0; a <= na; a++){ const [x, y] = formPoint(l, a, na), [u, v] = iso(x, y, l.z); a ? g.lineTo(ox + sc * u, oy + sc * v) : g.moveTo(ox + sc * u, oy + sc * v); }
-    g.stroke();
+  let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9, zmax = 0;
+  P.forEach((p, i) => { const [u, v] = iso(...p); mnx = Math.min(mnx, u - R[i]); mxx = Math.max(mxx, u + R[i]); mny = Math.min(mny, v - R[i]); mxy = Math.max(mxy, v + R[i]); zmax = Math.max(zmax, p[2]); });
+  const sc = 0.88 * Math.min(W / (mxx - mnx), H / (mxy - mny)), ox = W / 2 - sc * (mnx + mxx) / 2, oy = H / 2 - sc * (mny + mxy) / 2;
+  g.fillStyle = '#060606'; g.fillRect(0, 0, W, H); g.lineCap = 'round';
+  const seg = []; for(let i = 0; i < P.length - 1; i += 2) seg.push(i);
+  seg.sort((i, j) => (P[i][0] + P[i][1]) - (P[j][0] + P[j][1]));
+  for(const pass of [0, 1]) for(const i of seg){
+    const j = Math.min(P.length - 1, i + 2), [u0, v0] = iso(...P[i]), [u1, v1] = iso(...P[j]), l = 0.35 + 0.55 * P[i][2] / (zmax || 1);
+    g.strokeStyle = pass ? `rgb(${Math.round(120 * l + 40)},${Math.round(150 * l + 45)},${Math.round(90 * l + 35)})` : '#060606';
+    g.lineWidth = Math.max(1, 2 * R[i] * sc) + (pass ? 0 : 3);
+    g.beginPath(); g.moveTo(ox + sc * u0, oy + sc * v0); g.lineTo(ox + sc * u1, oy + sc * v1); g.stroke();
   }
 }
 function trianglesToSTL(tris, name){
@@ -1477,13 +1421,11 @@ const fileSafe = id => String(id).replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9
 function fabSessions(){ return lastS && !STORE.sessions.some(x => x.id === lastS.id) ? [...STORE.sessions, summary(lastS)] : STORE.sessions; }
 function fillFabSelect(){
   const sel = $('#fab-sesion'), prev = sel.value, list = fabSessions();
-  sel.innerHTML = list.map(x => `<option value="${x.id}">Visita ${x.visitante} · ${x.items.length} imágenes${x.items.some(i => i.trayectoria && i.trayectoria.length) ? '' : ' · sin trayectoria'}</option>`).reverse().join('');
+  sel.innerHTML = list.map(x => `<option value="${x.id}">Visita ${x.visitante} · ${x.items.length} imágenes${x.items.some(i => i.trayectoria && i.trayectoria.length) ? '' : ' · sin trayectoria'}${x.senal && x.senal.length ? '' : ' · sin sensor'}</option>`).reverse().join('');
   if(list.some(x => x.id === prev)) sel.value = prev;
 }
 function fabSession(){ const id = $('#fab-sesion').value; return fabSessions().find(x => x.id === id); }
-[['#fab-drama', 'fabDrama'], ['#fab-sway', 'fabSway'], ['#fab-height', 'fabHeight'], ['#fab-radius', 'fabRadius'], ['#fab-maxangle', 'fabMaxAngle'],
- ['#fab-layer', 'fabLayer'], ['#fab-nozzle', 'fabNozzle'], ['#fab-filament', 'fabFilament'], ['#fab-temp', 'fabTemp'], ['#fab-bedtemp', 'fabBedTemp'],
- ['#fab-speed', 'fabSpeed'], ['#fab-bedx', 'fabBedX'], ['#fab-bedy', 'fabBedY']].forEach(([sel, key]) => {
+[['#fab-width', 'fabWidth'], ['#fab-height', 'fabHeight'], ['#fab-rmin', 'fabRMin'], ['#fab-rmax', 'fabRMax'], ['#fab-smooth', 'fabSmooth']].forEach(([sel, key]) => {
   const inp = $(sel); inp.value = CFG[key];
   inp.addEventListener('change', () => { const v = parseFloat(inp.value); if(!isNaN(v) && v >= 0){ CFG[key] = v; saveCfg(); } });
 });
@@ -1491,25 +1433,14 @@ $('#fab-sesion').addEventListener('focus', fillFabSelect);
 document.querySelector('[data-target="p-fab"]').addEventListener('click', fillFabSelect);
 function exportForm(sess, kind){
   try{
-    const form = formLayers(sess), name = 'visita ' + sess.visitante;
-    if(kind === 'gcode'){
-      const g = formGcode(form, name);
-      download(`lo-que-queda-figura-${sess.visitante}.gcode`, g.text, 'text/x-gcode');
-      log(`G-code exportado: visita ${sess.visitante}, ${form.layers.length} capas, ${g.meters.toFixed(1)} m de filamento.`);
-    } else if(kind === '3mf'){
-      const tris = formTriangles(form);
-      download(`lo-que-queda-figura-${sess.visitante}.3mf`, trianglesTo3MF(tris, 'Lo que queda · ' + name), 'model/3mf');
-      log(`3MF exportado: visita ${sess.visitante} (${tris.length} triángulos).`);
-    } else {
-      const tris = formTriangles(form);
-      download(`lo-que-queda-figura-${sess.visitante}.stl`, trianglesToSTL(tris, name), 'model/stl');
-      log(`STL exportado: visita ${sess.visitante} (${tris.length} triángulos).`);
-    }
+    const tris = pipeTriangles(pipeForm(sess)), name = 'visita ' + sess.visitante;
+    if(kind === '3mf') download(`lo-que-queda-figura-${sess.visitante}.3mf`, trianglesTo3MF(tris, 'Lo que queda · ' + name), 'model/3mf');
+    else download(`lo-que-queda-figura-${sess.visitante}.stl`, trianglesToSTL(tris, name), 'model/stl');
+    log(`${kind.toUpperCase()} exportado: visita ${sess.visitante} (${tris.length} triángulos).`);
   }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); }
 }
 const fabNeedSession = () => { const x = fabSession(); if(!x) log('No hay visitas registradas todavía.', 'aviso'); return x; };
-$('#btn-fab-preview').addEventListener('click', () => { const x = fabNeedSession(); if(!x) return; try{ drawForm($('#fab-preview'), formLayers(x)); }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); } });
-$('#btn-gcode').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'gcode'); });
+$('#btn-fab-preview').addEventListener('click', () => { const x = fabNeedSession(); if(!x) return; try{ drawPipe($('#fab-preview'), pipeForm(x)); }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); } });
 $('#btn-stl').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'stl'); });
 $('#btn-3mf').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, '3mf'); });
 

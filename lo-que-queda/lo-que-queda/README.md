@@ -52,39 +52,30 @@ Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El des
 
 Si una imagen no provoca respuesta en la piel, se le suma un desgaste extra proporcional a cuánto se miró cada zona durante esa vista (por defecto, el doble del desgaste normal).
 
-## Fabricación: la visita como figura abstracta y G-code (07 · Fabricación)
+## Fabricación: la visita como un tubo (07 · Fabricación)
 
-Cada visita se materializa como **una sola figura abstracta**, y el G-code (la trayectoria de la boquilla) se genera directamente desde los datos, sin pasar por un slicer. La figura crece con el tiempo de la visita: cada capa es un instante, y su contorno es una curva cerrada alrededor de un centro.
+Cada visita se materializa como **una sola figura abstracta en forma de tubo** (pipe), continua de principio a fin:
 
-| Dato de la visita | Qué le hace a la figura |
+| Eje / rasgo | Dato de la visita |
 |---|---|
-| Posición de la mirada (trayectoria suavizada) | Mueve el centro de la capa: la figura se inclina hacia donde se miró |
-| Velocidad de la mirada | Pliegues: una mirada inquieta da más pliegues y más profundos |
-| Desgaste de la imagen vista (leído de arriba abajo mientras se la miraba) | Hunde el contorno donde la imagen está gastada |
-| Desgaste medio de la imagen | Adelgaza la figura |
-| Imagen sin respuesta en la piel | La contrae y la tuerce; la torsión se acumula |
-| Respuesta en la piel | La hincha según la amplitud |
+| **x, y** (recorrido) | La trayectoria de la mirada sobre la imagen, suavizada y escalada sin deformar para llenar la huella (ancho × ancho · 16/9) |
+| **z** (altura) | La señal del sensor de piel en ese mismo instante, normalizada dentro de la visita: más activación, más arriba |
+| **Grosor** | La quietud de la mirada: donde se detuvo (fijación) el tubo engorda, donde saltó rápido adelgaza; si la zona mirada estaba gastada, también adelgaza. Usa todo el rango entre el radio mínimo y el máximo |
 
-Después la forma se suaviza en altura (≈ 1,5 mm) y se limita el voladizo para que se imprima sin soportes: cada punto puede salirse de la capa anterior como máximo `altura de capa × tan(ángulo máximo)`.
-
-**G-code**: para Marlin, en coordenadas absolutas. Calienta la cama y la boquilla, hace home y una línea de purga. Imprime un fondo macizo en anillos concéntricos y luego **una espiral continua de una sola pared** (modo jarrón): la Z sube sin detenerse a lo largo de cada vuelta. La figura se centra en la cama y no se exporta si no cabe.
+El tubo se barre con marcos que minimizan la torsión, termina en tapas redondas y sus puntos más bajos se aplanan para apoyarse en la cama. Es una figura con arcos y voladizos, y el tubo puede cruzarse consigo mismo: se lamina en el slicer **con soportes** (los de árbol funcionan bien), que une los cruces al cortar.
 
 | Parámetro | Por defecto |
 |---|---|
-| Intensidad de la deformación | 0,8 (0–1) |
-| Cuánto sigue a la mirada | 0,6 (0–1) |
-| Alto / radio base | 120 mm / 30 mm |
-| Ángulo máximo de voladizo | 50° |
-| Capa / boquilla / filamento | 0,2 / 0,4 / 1,75 mm |
-| Temperaturas | 210 °C boquilla, 60 °C cama |
-| Velocidad | 25 mm/s |
-| Cama | 220 × 220 mm |
+| Ancho de la huella | 90 mm (fondo hasta 160 mm) |
+| Alto | 120 mm |
+| Radio del tubo | 4 a 16 mm |
+| Suavizado de la trayectoria | 1,2 s |
 
-**Antes de imprimir**, revisa temperaturas, filamento y tamaño de cama para tu impresora, y mira el archivo en la vista previa de G-code del slicer (PrusaSlicer y Cura la tienen). También se exporta la misma forma en **3MF** (formato recomendado: malla indexada, en milímetros, se abre directo en PrusaSlicer, Cura, Bambu Studio u OrcaSlicer) y en **STL**, para verla en un visor o laminarla en modo jarrón con tu propio perfil.
+La señal del sensor se guarda con cada sesión a 10 Hz (`senal`), junto a la trayectoria. Si el almacenamiento del navegador se llena, se descartan primero la trayectoria y la señal de las sesiones más antiguas. Las visitas sin trayectoria o sin señal guardada no pueden generar el tubo.
 
 Dónde se descarga:
-- **Informe final**: vista previa de la figura de la visita, **Descargar G-code de tu figura**, **Descargar figura 3D (3MF)** y **(STL)**.
-- **Panel 07** (tecla D): elegir cualquier visita registrada, ajustar los parámetros, ver la vista previa y exportar G-code, 3MF o STL. Las visitas sin trayectoria (anteriores a que se guardara) salen sin inclinación ni pliegues de mirada.
+- **Informe final**: vista previa del tubo de la visita, **Descargar figura 3D (3MF)** y **(STL)**.
+- **Panel 07** (tecla D): elegir cualquier visita registrada, ajustar los parámetros, ver la vista previa y exportar 3MF o STL.
 
 ## Validación y pruebas (02 · Mirada)
 
@@ -105,7 +96,7 @@ Para validar el eye tracking: activen el punto de mirada, miren esquinas y objet
 - **02 Mapas de calor**: por cada imagen vista, cuatro paneles: original, tu mirada, mirada acumulada de todos los visitantes y cómo la dejaste. Debajo, los segundos de mirada y la **zona más vista** (en una división de 3 × 3) con su porcentaje. Cada fila se descarga como PNG.
 - **03 Desgaste**: cuánto más gastadas quedaron las imágenes.
 
-Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar el G-code, el 3MF y el STL de la figura abstracta de la visita, imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
+Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar el 3MF y el STL del tubo de la visita, imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
 
 ## Datos (06 · Datos)
 
