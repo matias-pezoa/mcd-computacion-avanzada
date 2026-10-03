@@ -56,6 +56,10 @@ body.en-informe .data-readout,body.en-informe .stage-caption{display:none}
 .frame-bar{top:0;border-bottom:1px solid var(--line-soft)}
 .frame-bar-bottom{top:auto;bottom:0;border-bottom:none;border-top:1px solid var(--line-soft)}
 .frame-bar span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.frame-bar .frame-titulo{flex:1}
+.btn-home{flex:none;color:var(--white);text-decoration:none;border:1px solid var(--line);padding:6px 12px;transition:background-color .15s linear,color .15s linear}
+.btn-home:hover{background:var(--white);color:var(--black)}
+.btn-home:focus-visible{outline:1px solid var(--white);outline-offset:3px}
 
 /* ---------- escenario ---------- */
 .stage-full{position:fixed;top:var(--bar-h);bottom:var(--bar-h);left:0;right:0;background:var(--black);overflow:hidden;z-index:1}
@@ -229,7 +233,8 @@ body.visitante.operador .menu-dock{display:flex}
 <div class="mirada" id="mirada" aria-hidden="true"></div>
 
 <header class="frame-bar">
-  <span>Lo que queda — desgaste por mirada</span>
+  <a class="btn-home" href="../../" aria-label="Volver al inicio del sitio">← Inicio</a>
+  <span class="frame-titulo">Lo que queda — desgaste por mirada</span>
   <span id="barra-estado">Sistema listo</span>
 </header>
 
