@@ -90,11 +90,12 @@ Para validar el eye tracking: activen el punto de mirada, miren esquinas y objet
 - **02 Mapas de calor**: por cada imagen vista, cuatro paneles: original, tu mirada, mirada acumulada de todos los visitantes y cómo la dejaste. Debajo, los segundos de mirada y la **zona más vista** (en una división de 3 × 3) con su porcentaje. Cada fila se descarga como PNG.
 - **03 Desgaste**: cuánto más gastadas quedaron las imágenes.
 
-Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluidas las grillas de mirada y la señal completa), imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
+Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
 
 ## Datos (06 · Datos)
 
 - **Sesiones (JSON o CSV)**: una fila por imagen vista, con fuente de la mirada, precisión, condición, umbral, motivo de cierre, amplitud de la respuesta, si respondió, permanencia, segundos de mirada dentro y fuera de la imagen y si se aplicó desgaste extra.
+- **Trayectorias de la mirada (CSV)**: el recorrido de la mirada, no el mapa: una fila cada 50 ms con sesión, visitante, imagen, tiempo desde el inicio del feed (s) y posición `x, y` en fracción de la imagen (0–1, origen arriba a la izquierda). Una fila con `x, y` vacíos marca que la mirada salió de la imagen. Si el almacenamiento del navegador (~5 MB) se llena, se descartan primero las trayectorias de las sesiones más antiguas.
 - **Mapas acumulados**: lámina PNG con la mirada acumulada de todos los visitantes sobre cada imagen del corpus.
 - **Reiniciar desgaste y mapas** (05 · Corpus): devuelve todas las imágenes al original y borra la mirada acumulada.
 

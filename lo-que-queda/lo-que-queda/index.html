@@ -425,6 +425,7 @@ body.visitante.operador .menu-dock{display:flex}
       <div class="panel-acciones" style="margin-top:0">
         <button id="btn-json">Exportar sesiones (JSON)</button>
         <button id="btn-csv">Exportar sesiones (CSV)</button>
+        <button id="btn-trayectorias">Exportar trayectorias de la mirada (CSV)</button>
         <button id="btn-acumulados">Descargar mapas acumulados</button>
       </div>
       <div id="log"></div>
@@ -515,6 +516,13 @@ function gridsFor(id){
     };
   }
   return GRIDS[id];
+}
+// el almacenamiento del navegador tiene ~5 MB: si las trayectorias no caben, se quitan primero las de las sesiones más antiguas
+function trimStore(){
+  for(const s of STORE.sessions){
+    if(JSON.stringify(STORE).length < 4e6) return;
+    for(const i of s.items) delete i.trayectoria;
+  }
 }
 function persist(){
   for(const id in GRIDS){
@@ -865,7 +873,7 @@ function next(){
   if(S.idx >= S.seq.length){ S.ended = true; cur = null; fctx.fillStyle = '#060606'; fctx.fillRect(0, 0, feedCanvas.width, feedCanvas.height); hctx.clearRect(0, 0, heatLive.width, heatLive.height); maybeFinish(); return; }
   const item = corpus[S.seq[S.idx]], G = gridsFor(item.id);
   if(!(item.id in S.wearStart)){ S.wearStart[item.id] = meanOf(G.wear); G.viewers++; }
-  const it = {n: S.idx + 1, id: item.id, item, onset: t, amp: null, responded: null, dwell: null, gazeOn: 0, gazeOff: 0, viewHeat: new Float32Array(GW * GH)};
+  const it = {n: S.idx + 1, id: item.id, item, onset: t, amp: null, responded: null, dwell: null, gazeOn: 0, gazeOff: 0, viewHeat: new Float32Array(GW * GH), path: []};
   S.items.push(it); cur = it; renderDirty = true;
   setTimeout(() => evaluate(it), (CFG.latMax + 0.1) * 1000);
   if(CFG.mode === 'auto') autoTimer = setTimeout(next, CFG.autoMs);
@@ -886,6 +894,10 @@ setInterval(() => {
   if(screen !== 'feed' || !S || S.closed || !cur) return;
   const dt = 0.05; let inside = false, u = 0, v = 0;
   if(gazeFresh()){ const r = feedCanvas.getBoundingClientRect(); u = (GAZE.x - r.left) / r.width; v = (GAZE.y - r.top) / r.height; inside = u >= 0 && u <= 1 && v >= 0 && v <= 1; }
+  // trayectoria de la mirada: [t desde el inicio del feed, x, y] en fracción de la imagen; [t, null, null] marca que la mirada salió
+  const p = cur.path, t = +(now() - S.feedStartT).toFixed(2);
+  if(inside) p.push([t, +u.toFixed(4), +v.toFixed(4)]);
+  else if(p.length && p[p.length - 1][1] !== null) p.push([t, null, null]);
   if(!inside){ cur.gazeOff += dt; return; }
   cur.gazeOn += dt;
   const G = gridsFor(cur.id), sh = S.heat[cur.id] || (S.heat[cur.id] = new Float32Array(GW * GH));
@@ -917,6 +929,7 @@ function closeSession(reason){
   S.wearEnd = {}; for(const id in S.wearStart) S.wearEnd[id] = meanOf(gridsFor(id).wear);
   STORE.visitors++; S.visitor = STORE.visitors;
   STORE.sessions.push(summary(S)); if(STORE.sessions.length > 500) STORE.sessions.shift();
+  trimStore();
   persist(); lastS = S;
   $('#t-datos').textContent = visitasLabel();
   $('#cierre-motivo').textContent = reason === 'insensibilidad' ? `Tu cuerpo no respondió durante ${CFG.missWindow} imágenes seguidas` : 'Se acabaron las imágenes';
@@ -932,7 +945,7 @@ function summary(s){
     motivo: s.reason, cierreEn: s.closeAt || null, cfg: s.cfg,
     desgaste: Object.keys(s.wearStart).map(id => ({imagen: id, antes: +s.wearStart[id].toFixed(4), despues: +s.wearEnd[id].toFixed(4)})),
     items: s.items.map(i => ({n: i.n, imagen: i.id, t: +(i.onset - s.feedStartT).toFixed(3), amplitud: i.amp, respondio: i.responded,
-      permanencia: i.dwell, miradaEnImagen: +i.gazeOn.toFixed(2), miradaFuera: +i.gazeOff.toFixed(2), desgasteExtra: !!i.extraApplied, sinEvaluar: !!i.unevaluated}))};
+      permanencia: i.dwell, miradaEnImagen: +i.gazeOn.toFixed(2), miradaFuera: +i.gazeOff.toFixed(2), desgasteExtra: !!i.extraApplied, sinEvaluar: !!i.unevaluated, trayectoria: i.path}))};
 }
 
 /* ============================================================
@@ -1078,8 +1091,7 @@ $('#btn-png-todos').addEventListener('click', () => { const s = lastS; if(!s) re
 $('#btn-datos-sesion').addEventListener('click', () => {
   const s = lastS; if(!s) return;
   const raw = SIG.buf.filter(x => x.t >= s.startT && x.t <= s.endT).map(x => [+(x.t - s.feedStartT).toFixed(3), +x.v.toFixed(4)]);
-  const heat = {}; for(const id in s.heat) heat[id] = Array.from(s.heat[id], v => +v.toFixed(4));
-  download(`lo-que-queda-sesion-${s.visitor}.json`, JSON.stringify({sesion: summary(s), grilla: {columnas: GW, filas: GH}, mirada: heat, senal: {campos: ['t_s', 'valor'], datos: raw}}), 'application/json');
+  download(`lo-que-queda-sesion-${s.visitor}.json`, JSON.stringify({sesion: summary(s), trayectoria: {campos: ['t_s', 'x', 'y'], nota: 'x, y en fracción de la imagen (0–1, origen arriba a la izquierda), muestreo cada 50 ms; null = mirada fuera de la imagen'}, senal: {campos: ['t_s', 'valor'], datos: raw}}), 'application/json');
 });
 $('#btn-imprimir').addEventListener('click', () => window.print());
 $('#btn-borrar').addEventListener('click', () => {
@@ -1204,6 +1216,12 @@ $('#btn-csv').addEventListener('click', () => {
   for(const s of STORE.sessions) for(const i of s.items)
     rows.push([s.id, s.visitante, s.fuenteMirada, s.precisionMirada ?? '', s.condicion, s.umbral, s.motivo, s.cierreEn ?? '', i.n, i.imagen, i.t, i.amplitud ?? '', i.respondio ?? '', i.permanencia ?? '', i.miradaEnImagen, i.miradaFuera, i.desgasteExtra, i.sinEvaluar].join(','));
   download('lo-que-queda-sesiones.csv', rows.join('\n'), 'text/csv');
+});
+$('#btn-trayectorias').addEventListener('click', () => {
+  const rows = ['sesion,visitante,n,imagen,t_s,x,y'];
+  for(const s of STORE.sessions) for(const i of s.items) for(const [t, x, y] of i.trayectoria || [])
+    rows.push([s.id, s.visitante, i.n, i.imagen, t, x ?? '', y ?? ''].join(','));
+  download('lo-que-queda-trayectorias.csv', rows.join('\n'), 'text/csv');
 });
 $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
