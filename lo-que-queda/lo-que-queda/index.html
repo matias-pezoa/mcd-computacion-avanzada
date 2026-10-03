@@ -1238,7 +1238,7 @@ function trajectoryCSV(sessions){
 }
 $('#btn-trayectorias').addEventListener('click', () => download('lo-que-queda-trayectorias.csv', trajectoryCSV(STORE.sessions), 'text/csv'));
 $('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; if(!s) return; download(`lo-que-queda-trayectoria-${s.visitor}.csv`, trajectoryCSV([summary(s)]), 'text/csv'); });
-// la figura de esta visita: G-code (trayectoria de la boquilla) y STL de la misma forma
+// la figura de esta visita: el tubo en 3MF y STL
 $('#btn-stl-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'stl'); });
 $('#btn-3mf-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), '3mf'); });
 $('#btn-acumulados').addEventListener('click', () => {
