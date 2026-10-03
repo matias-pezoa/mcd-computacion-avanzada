@@ -319,6 +319,8 @@ body.visitante.operador .menu-dock{display:flex}
         <div class="acciones">
           <button id="btn-png-todos">Descargar todos los mapas</button>
           <button id="btn-datos-sesion">Exportar datos de la sesión</button>
+          <button id="btn-trayectoria-sesion">Exportar trayectoria de la mirada (CSV)</button>
+          <button id="btn-stl-sesion">Descargar pieza 3D (STL)</button>
           <button id="btn-imprimir">Imprimir informe</button>
           <button id="btn-borrar">Borrar mi registro</button>
           <button id="btn-terminar" class="lleno">Terminar</button>
@@ -1217,11 +1219,20 @@ $('#btn-csv').addEventListener('click', () => {
     rows.push([s.id, s.visitante, s.fuenteMirada, s.precisionMirada ?? '', s.condicion, s.umbral, s.motivo, s.cierreEn ?? '', i.n, i.imagen, i.t, i.amplitud ?? '', i.respondio ?? '', i.permanencia ?? '', i.miradaEnImagen, i.miradaFuera, i.desgasteExtra, i.sinEvaluar].join(','));
   download('lo-que-queda-sesiones.csv', rows.join('\n'), 'text/csv');
 });
-$('#btn-trayectorias').addEventListener('click', () => {
+function trajectoryCSV(sessions){
   const rows = ['sesion,visitante,n,imagen,t_s,x,y'];
-  for(const s of STORE.sessions) for(const i of s.items) for(const [t, x, y] of i.trayectoria || [])
+  for(const s of sessions) for(const i of s.items) for(const [t, x, y] of i.trayectoria || [])
     rows.push([s.id, s.visitante, i.n, i.imagen, t, x ?? '', y ?? ''].join(','));
-  download('lo-que-queda-trayectorias.csv', rows.join('\n'), 'text/csv');
+  return rows.join('\n');
+}
+$('#btn-trayectorias').addEventListener('click', () => download('lo-que-queda-trayectorias.csv', trajectoryCSV(STORE.sessions), 'text/csv'));
+$('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; if(!s) return; download(`lo-que-queda-trayectoria-${s.visitor}.csv`, trajectoryCSV([summary(s)]), 'text/csv'); });
+// la pieza de esta visita: una placa por cada imagen que vio, con el desgaste tal como quedó
+$('#btn-stl-sesion').addEventListener('click', () => {
+  const s = lastS; if(!s) return;
+  const ids = [...new Set(s.items.map(i => i.id))], tris = [], gap = 5;
+  ids.forEach((id, k) => reliefTriangles(gridsFor(id).wear, k * (CFG.fabWidth + gap), tris));
+  download(`lo-que-queda-pieza-${s.visitor}.stl`, trianglesToSTL(tris, 'visita ' + s.visitor), 'model/stl');
 });
 $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
