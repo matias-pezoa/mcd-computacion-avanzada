@@ -80,11 +80,11 @@ Después la forma se suaviza en altura (≈ 1,5 mm) y se limita el voladizo para
 | Velocidad | 25 mm/s |
 | Cama | 220 × 220 mm |
 
-**Antes de imprimir**, revisa temperaturas, filamento y tamaño de cama para tu impresora, y mira el archivo en la vista previa de G-code del slicer (PrusaSlicer y Cura la tienen). También se exporta un **STL** de la misma forma, para verla en un visor o laminarla en modo jarrón con tu propio perfil.
+**Antes de imprimir**, revisa temperaturas, filamento y tamaño de cama para tu impresora, y mira el archivo en la vista previa de G-code del slicer (PrusaSlicer y Cura la tienen). También se exporta la misma forma en **3MF** (formato recomendado: malla indexada, en milímetros, se abre directo en PrusaSlicer, Cura, Bambu Studio u OrcaSlicer) y en **STL**, para verla en un visor o laminarla en modo jarrón con tu propio perfil.
 
 Dónde se descarga:
-- **Informe final**: vista previa de la figura de la visita, **Descargar G-code de tu figura** y **Descargar figura 3D (STL)**.
-- **Panel 07** (tecla D): elegir cualquier visita registrada, ajustar los parámetros, ver la vista previa y exportar G-code o STL. Las visitas sin trayectoria (anteriores a que se guardara) salen sin inclinación ni pliegues de mirada.
+- **Informe final**: vista previa de la figura de la visita, **Descargar G-code de tu figura**, **Descargar figura 3D (3MF)** y **(STL)**.
+- **Panel 07** (tecla D): elegir cualquier visita registrada, ajustar los parámetros, ver la vista previa y exportar G-code, 3MF o STL. Las visitas sin trayectoria (anteriores a que se guardara) salen sin inclinación ni pliegues de mirada.
 
 ## Validación y pruebas (02 · Mirada)
 
@@ -105,7 +105,7 @@ Para validar el eye tracking: activen el punto de mirada, miren esquinas y objet
 - **02 Mapas de calor**: por cada imagen vista, cuatro paneles: original, tu mirada, mirada acumulada de todos los visitantes y cómo la dejaste. Debajo, los segundos de mirada y la **zona más vista** (en una división de 3 × 3) con su porcentaje. Cada fila se descarga como PNG.
 - **03 Desgaste**: cuánto más gastadas quedaron las imágenes.
 
-Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar el G-code y el STL de la figura abstracta de la visita, imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
+Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar el G-code, el 3MF y el STL de la figura abstracta de la visita, imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
 
 ## Datos (06 · Datos)
 

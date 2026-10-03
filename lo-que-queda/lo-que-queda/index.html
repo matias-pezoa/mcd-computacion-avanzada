@@ -323,6 +323,7 @@ body.visitante.operador .menu-dock{display:flex}
           <button id="btn-datos-sesion">Exportar datos de la sesión</button>
           <button id="btn-trayectoria-sesion">Exportar trayectoria de la mirada (CSV)</button>
           <button id="btn-gcode-sesion">Descargar G-code de tu figura</button>
+          <button id="btn-3mf-sesion">Descargar figura 3D (3MF)</button>
           <button id="btn-stl-sesion">Descargar figura 3D (STL)</button>
           <button id="btn-imprimir">Imprimir informe</button>
           <button id="btn-borrar">Borrar mi registro</button>
@@ -462,6 +463,7 @@ body.visitante.operador .menu-dock{display:flex}
       <div class="panel-acciones">
         <button id="btn-fab-preview">Vista previa</button>
         <button id="btn-gcode">Exportar G-code</button>
+        <button id="btn-3mf">Exportar 3MF</button>
         <button id="btn-stl">Exportar STL</button>
       </div>
       <p class="hint">La figura crece con el tiempo de la visita: cada capa es un instante. La mirada mueve el centro de la capa (la figura se inclina hacia donde miraste) y su velocidad la llena de pliegues; el desgaste de la imagen que estabas viendo hunde el contorno; cada imagen que no provocó respuesta en la piel la contrae y la tuerce. El G-code imprime en espiral continua (modo jarrón, una sola pared) tras un fondo macizo, para Marlin, en coordenadas absolutas. Revisa temperaturas y tamaño de cama antes de imprimir y mira el archivo en la vista previa de tu slicer.</p>
@@ -1246,6 +1248,7 @@ $('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; 
 // la figura de esta visita: G-code (trayectoria de la boquilla) y STL de la misma forma
 $('#btn-gcode-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'gcode'); });
 $('#btn-stl-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'stl'); });
+$('#btn-3mf-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), '3mf'); });
 $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
   for(const c of corpus) fake.heat[c.id] = gridsFor(c.id).heat;
@@ -1437,6 +1440,39 @@ function trianglesToSTL(tris, name){
   for(const t of tris){ for(const vec of t){ dv.setFloat32(o, vec[0], true); dv.setFloat32(o + 4, vec[1], true); dv.setFloat32(o + 8, vec[2], true); o += 12; } o += 2; }
   return buf;
 }
+// 3MF: un ZIP (sin comprimir) con el modelo en XML; malla indexada, en milímetros, triángulos en sentido antihorario vistos desde afuera.
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for(let n = 0; n < 256; n++){ let c = n; for(let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b){ let c = 0xFFFFFFFF; for(let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xFFFFFFFF) >>> 0; }
+function zipStore(files){   // files: [[nombre, Uint8Array]]
+  const enc = new TextEncoder(), parts = [], central = []; let off = 0;
+  for(const [name, data] of files){
+    const nb = enc.encode(name), crc = crc32(data), h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(8, 0, true);
+    h.setUint32(14, crc, true); h.setUint32(18, data.length, true); h.setUint32(22, data.length, true); h.setUint16(26, nb.length, true);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true);
+    c.setUint32(16, crc, true); c.setUint32(20, data.length, true); c.setUint32(24, data.length, true); c.setUint16(28, nb.length, true); c.setUint32(42, off, true);
+    parts.push(new Uint8Array(h.buffer), nb, data); central.push(new Uint8Array(c.buffer), nb);
+    off += 30 + nb.length + data.length;
+  }
+  const size = central.reduce((p, b) => p + b.length, 0), e = new DataView(new ArrayBuffer(22));
+  e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, size, true); e.setUint32(16, off, true);
+  return new Blob([...parts, ...central, new Uint8Array(e.buffer)], {type: 'model/3mf'});
+}
+function trianglesTo3MF(tris, title){
+  const idx = new Map(), verts = [], faces = [];
+  const id = v => { const k = v[0].toFixed(4) + ',' + v[1].toFixed(4) + ',' + v[2].toFixed(4); let i = idx.get(k); if(i === undefined){ i = verts.length; idx.set(k, i); verts.push(`<vertex x="${v[0].toFixed(4)}" y="${v[1].toFixed(4)}" z="${v[2].toFixed(4)}"/>`); } return i; };
+  for(const [, a, b, c] of tris){ const i = id(a), j = id(b), k = id(c); if(i !== j && j !== k && i !== k) faces.push(`<triangle v1="${i}" v2="${j}" v3="${k}"/>`); }
+  const esc = t => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+  const model = `<?xml version="1.0" encoding="UTF-8"?>\n<model unit="millimeter" xml:lang="es-CL" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n`
+    + `<metadata name="Title">${esc(title)}</metadata>\n<metadata name="Application">Lo que queda</metadata>\n`
+    + `<resources>\n<object id="1" type="model" name="${esc(title)}">\n<mesh>\n<vertices>\n${verts.join('\n')}\n</vertices>\n<triangles>\n${faces.join('\n')}\n</triangles>\n</mesh>\n</object>\n</resources>\n`
+    + `<build>\n<item objectid="1"/>\n</build>\n</model>\n`;
+  const ct = `<?xml version="1.0" encoding="UTF-8"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml"/></Types>\n`;
+  const rels = `<?xml version="1.0" encoding="UTF-8"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel"/></Relationships>\n`;
+  const enc = new TextEncoder();
+  return zipStore([['[Content_Types].xml', enc.encode(ct)], ['_rels/.rels', enc.encode(rels)], ['3D/3dmodel.model', enc.encode(model)]]);
+}
 const fileSafe = id => String(id).replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9_-]+/gi, '_');
 function fabSessions(){ return lastS && !STORE.sessions.some(x => x.id === lastS.id) ? [...STORE.sessions, summary(lastS)] : STORE.sessions; }
 function fillFabSelect(){
@@ -1460,6 +1496,10 @@ function exportForm(sess, kind){
       const g = formGcode(form, name);
       download(`lo-que-queda-figura-${sess.visitante}.gcode`, g.text, 'text/x-gcode');
       log(`G-code exportado: visita ${sess.visitante}, ${form.layers.length} capas, ${g.meters.toFixed(1)} m de filamento.`);
+    } else if(kind === '3mf'){
+      const tris = formTriangles(form);
+      download(`lo-que-queda-figura-${sess.visitante}.3mf`, trianglesTo3MF(tris, 'Lo que queda · ' + name), 'model/3mf');
+      log(`3MF exportado: visita ${sess.visitante} (${tris.length} triángulos).`);
     } else {
       const tris = formTriangles(form);
       download(`lo-que-queda-figura-${sess.visitante}.stl`, trianglesToSTL(tris, name), 'model/stl');
@@ -1471,6 +1511,7 @@ const fabNeedSession = () => { const x = fabSession(); if(!x) log('No hay visita
 $('#btn-fab-preview').addEventListener('click', () => { const x = fabNeedSession(); if(!x) return; try{ drawForm($('#fab-preview'), formLayers(x)); }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); } });
 $('#btn-gcode').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'gcode'); });
 $('#btn-stl').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'stl'); });
+$('#btn-3mf').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, '3mf'); });
 
 /* ---------- ventana 03 · Señal y lectura en vivo ---------- */
 const gs = $('#grafico-senal'), gsx = gs.getContext('2d');
