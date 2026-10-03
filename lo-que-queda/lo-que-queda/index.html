@@ -500,7 +500,7 @@ const GW = 27, GH = 48, RW = 540, RH = 960, CELL = 20;   // grilla de desgaste: 
 const DEFAULT_CFG = {
   calibSec: 20, feedLength: 30, missWindow: 8, latMin: 0.8, latMax: 3.5, minAmp: 0.04, kNoise: 3,
   stepsPerImage: 2, mode: 'manual', autoMs: 3000, invert: false,
-  wearRate: 0.25,       // desgaste por segundo de mirada en el centro de la mancha
+  wearRate: 0.2,        // desgaste por segundo de mirada en el centro de la mancha
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
@@ -509,7 +509,7 @@ const DEFAULT_CFG = {
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
-if(CFG.wearRate === 0.08) CFG.wearRate = DEFAULT_CFG.wearRate;   // configuraciones guardadas con la velocidad antigua
+if(CFG.wearRate === 0.08 || CFG.wearRate === 0.25) CFG.wearRate = DEFAULT_CFG.wearRate;   // configuraciones guardadas con velocidades anteriores
 function saveCfg(){ save('lqq2_cfg', CFG); }
 let STORE = Object.assign({visitors: 0, sessions: [], img: {}}, load('lqq2_store', {}));
 const GRIDS = {};
@@ -667,16 +667,55 @@ function layersFor(item){
   return L;
 }
 const WHITE = '#f4f4f1';
-// nivel 0 → original · 0–0,4 → pixelado creciente (los colores se promedian por bloque) · 0,2–0,5 → manchones de color · 0,75–1 → blanqueo hasta blanco total
-function compose(item, wear, ctx){
-  const L = layersFor(item), n = BLOCKS.length;
+// vector de movimiento de la mirada, en px de la imagen por lectura: arrastra los bloques del datamosh
+const MV = {x: 0, y: 0, u: null, v: null};
+// cuadro anterior del feed: el datamosh copia de ahí, como un video al que le faltan los cuadros clave
+const prevFrame = document.createElement('canvas'); prevFrame.width = RW; prevFrame.height = RH;
+const pctx = prevFrame.getContext('2d');
+const hash = (a, b) => { const h = Math.sin(a * 127.1 + b * 311.7) * 43758.5453; return h - Math.floor(h); };
+// licuado: campo de flujo suave (en px) que deforma la imagen como si se derritiera; cambia lento con el tiempo
+function flow(px, py, seed, t){
+  const a = px / RW * 6.3 + seed, b = py / RH * 9.1 - seed;
+  return [Math.sin(b * 1.3 + t * 0.7) + 0.6 * Math.sin(a * 2.1 + b * 0.8 - t * 0.5), Math.cos(a * 1.7 - t * 0.6) + 0.6 * Math.cos(b * 1.9 + a * 0.6 + t * 0.4)];
+}
+// nivel 0 → original · 0,05–0,4 → licuado (la imagen se derrite y se estira) · 0–0,55 → pixelado (bloques de hasta 27 px)
+// · 0,25–0,85 → datamosh (bloques arrastrados en la dirección de la mirada, con restos del cuadro anterior) · 0,3–0,6 → manchones · 0,8–1 → blanco
+function compose(item, wear, ctx, moshPrev){
+  const L = layersFor(item), n = BLOCKS.length, t = performance.now() / 1000, seed = (String(item.id).length * 7.13 + String(item.id).charCodeAt(0)) % 10;
   ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = false; ctx.drawImage(L.color[0], 0, 0);
+  const SL = 4, sh = CELL / SL;
   for(let cy = 0; cy < GH; cy++) for(let cx = 0; cx < GW; cx++){
     const l = wear[cy * GW + cx]; if(l < 0.002) continue;
-    const k = Math.ceil(clamp(l / 0.4, 0, 1) * (n - 1)), x = cx * CELL, y = cy * CELL;
+    const k = Math.ceil(clamp(l / 0.55, 0, 1) * (n - 3)), x = cx * CELL, y = cy * CELL;
     ctx.globalAlpha = 1; ctx.drawImage(L.color[k], x, y, CELL, CELL, x, y, CELL, CELL);
-    const bs = smooth(0.2, 0.5, l); if(bs > 0){ ctx.globalAlpha = bs; ctx.drawImage(L.blob, x, y, CELL, CELL, x, y, CELL, CELL); }
-    const w = smooth(0.75, 1, l); if(w > 0){ ctx.globalAlpha = w; ctx.fillStyle = WHITE; ctx.fillRect(x, y, CELL, CELL); }
+    // licuado: franjas de 5 px que toman la imagen desde un punto desplazado por el campo de flujo (la imagen se derrite)
+    const lq = smooth(0.05, 0.45, l);
+    if(lq > 0){
+      const amp = 70 * lq, src = L.color[Math.max(0, k - 3)];
+      ctx.globalAlpha = Math.min(1, 0.5 + lq);
+      for(let s = 0; s < SL; s++){
+        const yy = y + s * sh, [fx, fy] = flow(x + CELL / 2, yy + sh / 2, seed, t);
+        ctx.drawImage(src, clamp(x + fx * amp, 0, RW - CELL), clamp(yy + fy * amp * 1.4 + amp * 0.6, 0, RH - sh), CELL, sh, x, yy, CELL, sh);
+      }
+    }
+    // datamosh, por macrobloques de 2 × 2 celdas (como un video comprimido al que le faltan cuadros clave):
+    //   · bloques que saltan en la dirección en que se mueve la mirada, copiados del cuadro anterior
+    //   · bloques "sangrados": una sola fila de píxeles estirada hacia abajo
+    const dm = smooth(0.2, 0.55, l) * (1 - smooth(0.85, 0.97, l));
+    const bx = cx >> 1, by = cy >> 1, hb = hash(bx, by), tick = Math.floor(t * 2);
+    if(dm > 0 && hb < 0.25 + 0.7 * dm){
+      const mx = (MV.x * 2.5 + (hash(by, bx + tick) - 0.5) * 120 * dm), my = (MV.y * 2.5 + (hash(bx + 9, by + tick) - 0.5) * 40 * dm);
+      ctx.globalAlpha = Math.min(1, 0.35 + dm);
+      if(hash(bx * 3 + 1, by * 7) < 0.55){
+        const src = moshPrev || L.color[1];
+        ctx.drawImage(src, clamp(x - mx, 0, RW - CELL), clamp(y - my, 0, RH - CELL), CELL, CELL, x, y, CELL, CELL);
+      } else {
+        const row = clamp((by << 1) * CELL + Math.floor(hash(bx, by * 3) * 6), 0, RH - 1);
+        ctx.drawImage(moshPrev || L.color[0], x, row, CELL, 1, x, y, CELL, CELL);
+      }
+    }
+    const bs = smooth(0.3, 0.6, l); if(bs > 0){ ctx.globalAlpha = bs; ctx.drawImage(L.blob, x, y, CELL, CELL, x, y, CELL, CELL); }
+    const w = smooth(0.8, 1, l); if(w > 0){ ctx.globalAlpha = w; ctx.fillStyle = WHITE; ctx.fillRect(x, y, CELL, CELL); }
   }
   ctx.globalAlpha = 1; return ctx.canvas;
 }
@@ -907,6 +946,8 @@ setInterval(() => {
   const p = cur.path, t = +(now() - S.feedStartT).toFixed(2);
   if(inside) p.push([t, +u.toFixed(4), +v.toFixed(4)]);
   else if(p.length && p[p.length - 1][1] !== null) p.push([t, null, null]);
+  if(inside && MV.u !== null){ MV.x = MV.x * 0.8 + clamp((u - MV.u) * RW, -40, 40) * 0.2; MV.y = MV.y * 0.8 + clamp((v - MV.v) * RH, -40, 40) * 0.2; }
+  if(inside){ MV.u = u; MV.v = v; } else { MV.u = MV.v = null; MV.x *= 0.8; MV.y *= 0.8; }
   if(!inside){ cur.gazeOff += dt; return; }
   cur.gazeOn += dt;
   const G = gridsFor(cur.id), sh = S.heat[cur.id] || (S.heat[cur.id] = new Float32Array(GW * GH));
@@ -976,7 +1017,8 @@ let lastCompose = 0;
 function frame(t){
   if(renderDirty && screen === 'feed' && cur && t - lastCompose > 45){
     lastCompose = t; renderDirty = false;
-    compose(cur.item, gridsFor(cur.id).wear, cctx);
+    pctx.drawImage(comp, 0, 0);
+    compose(cur.item, gridsFor(cur.id).wear, cctx, prevFrame);
     fctx.imageSmoothingEnabled = false; fctx.drawImage(comp, 0, 0, feedCanvas.width, feedCanvas.height);
     hctx.clearRect(0, 0, heatLive.width, heatLive.height);
     if(CFG.showLiveHeat && S && S.heat[cur.id]) drawHeat(hctx, S.heat[cur.id], heatLive.width, heatLive.height, 0.75);

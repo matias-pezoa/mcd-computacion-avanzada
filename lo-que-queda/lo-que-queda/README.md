@@ -44,9 +44,11 @@ La imagen se divide en una grilla de 27 × 48 celdas. Cada lectura de la mirada 
 
 | Desgaste | Efecto |
 |---|---|
-| 0 a 0,4 | Pixelado creciente (bloques de 1 a 60 px; cada bloque promedia sus colores) |
-| 0,2 a 0,5 | Los bloques se funden en manchones de color: imagen reducida a pocos tonos, desenfocada y más saturada |
-| 0,75 a 1 | Blanqueo; en 1 la celda queda blanca |
+| 0,05 a 0,45 | **Licuado**: la imagen se derrite y gotea; cada franja de 5 px toma la imagen desde un punto desplazado por un campo de flujo suave que cambia lento con el tiempo |
+| 0 a 0,55 | Pixelado creciente (bloques de 1 a 27 px; cada bloque promedia sus colores) |
+| 0,2 a 0,85 | **Datamosh**, por macrobloques de 40 px: bloques que saltan en la dirección en que se mueve la mirada, copiados del cuadro anterior (como un video al que le faltan los cuadros clave; al cambiar de imagen, la anterior se filtra en las zonas gastadas), y bloques *sangrados*, donde una sola fila de píxeles se estira hacia abajo |
+| 0,3 a 0,6 | Los bloques se funden en manchones de color: imagen reducida a pocos tonos, desenfocada y más saturada |
+| 0,8 a 1 | Blanqueo; en 1 la celda queda blanca |
 
 Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El desgaste se guarda por imagen y se **comparte entre todos los visitantes**: cada persona recibe las imágenes como las dejó la anterior.
 
