@@ -430,6 +430,27 @@ body.visitante.operador .menu-dock{display:flex}
       <div id="log"></div>
     </div>
   </div>
+
+  <div class="menu-item">
+    <button class="menu-trigger" type="button" data-target="p-fab" aria-expanded="false" aria-controls="p-fab">
+      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">STL</span>
+    </button>
+    <div class="menu-panel" id="p-fab" hidden>
+      <div class="grid">
+        <label>Imagen<select id="fab-img"></select></label>
+        <label>Ancho de la pieza (mm)<input type="number" id="fab-width" min="20" max="250" step="1"></label>
+        <label>Base (mm)<input type="number" id="fab-base" min="0.4" max="10" step="0.1"></label>
+        <label>Relieve máximo (mm)<input type="number" id="fab-relief" min="0.5" max="30" step="0.1"></label>
+        <label>Resolución (vértices por celda)<input type="number" id="fab-res" min="1" max="8" step="1"></label>
+        <label class="check"><input type="checkbox" id="fab-invert">Invertir: lo gastado sube</label>
+      </div>
+      <div class="panel-acciones">
+        <button id="btn-stl">Exportar STL de la imagen</button>
+        <button id="btn-stl-todas">Exportar bandeja con todas (STL)</button>
+      </div>
+      <p class="hint">Regla: altura = base + relieve × (1 − desgaste). Lo que nadie miró queda alto; lo gastado se rebaja hasta la base. La pieza mantiene la proporción 9:16 y sale en milímetros, lista para el slicer, apoyada sobre su cara plana.</p>
+    </div>
+  </div>
 </nav>
 
 <footer class="frame-bar frame-bar-bottom">
@@ -475,6 +496,7 @@ const DEFAULT_CFG = {
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
+  fabWidth: 60, fabBase: 1.2, fabRelief: 4, fabRes: 3, fabInvert: false,   // relieve para impresión 3D (mm)
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
@@ -1187,6 +1209,81 @@ $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
   for(const c of corpus) fake.heat[c.id] = gridsFor(c.id).heat;
   download('lo-que-queda-mapas-acumulados.png', sheet(fake, corpus.map(c => c.id)).toDataURL('image/png'));
+});
+
+/* ---------- ventana 07 · Fabricación: desgaste → relieve STL ---------- */
+// Muestrea la grilla de desgaste con interpolación bilineal (u, v en 0–1).
+function sampleGrid(a, u, v){
+  const x = clamp(u * GW - 0.5, 0, GW - 1), y = clamp(v * GH - 0.5, 0, GH - 1);
+  const x0 = Math.floor(x), y0 = Math.floor(y), x1 = Math.min(GW - 1, x0 + 1), y1 = Math.min(GH - 1, y0 + 1), fx = x - x0, fy = y - y0;
+  const top = a[y0 * GW + x0] * (1 - fx) + a[y0 * GW + x1] * fx, bot = a[y1 * GW + x0] * (1 - fx) + a[y1 * GW + x1] * fx;
+  return top * (1 - fy) + bot * fy;
+}
+// Pieza cerrada (manifold): superficie superior según el desgaste, paredes laterales y fondo plano en z = 0.
+function reliefTriangles(wear, ox, tris){
+  const W = CFG.fabWidth, H = W * 16 / 9, res = Math.max(1, Math.round(CFG.fabRes));
+  const nx = GW * res, ny = GH * res, dx = W / nx, dy = H / ny;
+  const z = (i, j) => { const w = sampleGrid(wear, i / nx, j / ny); return CFG.fabBase + CFG.fabRelief * (CFG.fabInvert ? w : 1 - w); };
+  const P = (i, j, top) => [ox + i * dx, H - j * dy, top ? z(i, j) : 0];   // j = 0 es el borde superior de la imagen
+  const add = (a, b, c, n) => {   // corrige el orden para que la normal apunte hacia afuera
+    const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
+    const cr = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
+    tris.push(cr[0]*n[0] + cr[1]*n[1] + cr[2]*n[2] >= 0 ? [n, a, b, c] : [n, a, c, b]);
+  };
+  const Z = [0, 0, 1];
+  for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
+    const a = P(i, j, 1), b = P(i + 1, j, 1), c = P(i + 1, j + 1, 1), d = P(i, j + 1, 1);
+    add(a, d, c, Z); add(a, c, b, Z);
+  }
+  // contorno en orden: borde superior, derecho, inferior, izquierdo
+  const ring = [];
+  for(let i = 0; i < nx; i++) ring.push([i, 0, [0, 1, 0]]);
+  for(let j = 0; j < ny; j++) ring.push([nx, j, [1, 0, 0]]);
+  for(let i = nx; i > 0; i--) ring.push([i, ny, [0, -1, 0]]);
+  for(let j = ny; j > 0; j--) ring.push([0, j, [-1, 0, 0]]);
+  const ctr = [ox + W / 2, H / 2, 0];
+  for(let k = 0; k < ring.length; k++){
+    const [i0, j0, n] = ring[k], [i1, j1] = ring[(k + 1) % ring.length];
+    const pt = P(i0, j0, 1), qt = P(i1, j1, 1), pb = P(i0, j0, 0), qb = P(i1, j1, 0);
+    add(pb, qb, qt, n); add(pb, qt, pt, n);
+    add(ctr, pb, qb, [0, 0, -1]);
+  }
+}
+function trianglesToSTL(tris, name){
+  const buf = new ArrayBuffer(84 + tris.length * 50), dv = new DataView(buf);
+  const head = ('lo que queda - ' + name).slice(0, 80); for(let i = 0; i < head.length; i++) dv.setUint8(i, head.charCodeAt(i) & 127);
+  dv.setUint32(80, tris.length, true);
+  let o = 84;
+  for(const t of tris){ for(const vec of t){ dv.setFloat32(o, vec[0], true); dv.setFloat32(o + 4, vec[1], true); dv.setFloat32(o + 8, vec[2], true); o += 12; } o += 2; }
+  return buf;
+}
+const fileSafe = id => String(id).replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9_-]+/gi, '_');
+function fillFabSelect(){
+  const sel = $('#fab-img'), prev = sel.value;
+  sel.innerHTML = corpus.map(c => `<option value="${c.id}">${c.id} · ${(meanOf(gridsFor(c.id).wear) * 100).toFixed(1)} % gastada</option>`).join('');
+  if(corpus.some(c => c.id === prev)) sel.value = prev;
+}
+[['#fab-width', 'fabWidth'], ['#fab-base', 'fabBase'], ['#fab-relief', 'fabRelief'], ['#fab-res', 'fabRes']].forEach(([sel, key]) => {
+  const inp = $(sel); inp.value = CFG[key];
+  inp.addEventListener('change', () => { const v = parseFloat(inp.value); if(!isNaN(v) && v > 0){ CFG[key] = v; saveCfg(); } });
+});
+$('#fab-invert').checked = CFG.fabInvert;
+$('#fab-invert').addEventListener('change', e => { CFG.fabInvert = e.target.checked; saveCfg(); });
+$('#fab-img').addEventListener('focus', fillFabSelect);
+document.querySelector('[data-target="p-fab"]').addEventListener('click', fillFabSelect);
+$('#btn-stl').addEventListener('click', () => {
+  if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
+  const id = $('#fab-img').value || corpus[0].id, tris = [];
+  reliefTriangles(gridsFor(id).wear, 0, tris);
+  download(`lo-que-queda-${fileSafe(id)}.stl`, trianglesToSTL(tris, id), 'model/stl');
+  log(`STL exportado: ${id} (${tris.length} triángulos, ${CFG.fabWidth} × ${(CFG.fabWidth * 16 / 9).toFixed(1)} mm).`);
+});
+$('#btn-stl-todas').addEventListener('click', () => {
+  if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
+  const tris = [], gap = 5;
+  corpus.forEach((c, k) => reliefTriangles(gridsFor(c.id).wear, k * (CFG.fabWidth + gap), tris));
+  download('lo-que-queda-bandeja.stl', trianglesToSTL(tris, 'bandeja'), 'model/stl');
+  log(`Bandeja STL exportada: ${corpus.length} piezas en fila (${tris.length} triángulos).`);
 });
 
 /* ---------- ventana 03 · Señal y lectura en vivo ---------- */

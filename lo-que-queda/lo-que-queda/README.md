@@ -52,6 +52,25 @@ Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El des
 
 Si una imagen no provoca respuesta en la piel, se le suma un desgaste extra proporcional a cuánto se miró cada zona durante esa vista (por defecto, el doble del desgaste normal).
 
+## Fabricación: del desgaste a una pieza impresa en 3D (07 · Fabricación)
+
+El panel del operador exporta el desgaste de cada imagen como un relieve en STL, en milímetros, listo para el slicer. La regla de diseño es:
+
+```
+altura = base + relieve × (1 − desgaste)
+```
+
+Lo que nadie miró queda alto y lo gastado se rebaja hasta la base: la pieza es literalmente *lo que queda*. Con **Invertir**, lo gastado sube. La grilla de 27 × 48 se interpola (bilineal) a la resolución elegida, la pieza mantiene la proporción 9:16 y es un sólido cerrado con fondo plano en z = 0.
+
+| Parámetro | Por defecto |
+|---|---|
+| Ancho de la pieza | 60 mm (alto 106,7 mm) |
+| Base | 1,2 mm |
+| Relieve máximo | 4 mm |
+| Resolución | 3 vértices por celda |
+
+**Exportar bandeja** pone todas las imágenes del corpus en fila, separadas 5 mm, en un solo STL.
+
 ## Validación y pruebas (02 · Mirada)
 
 | Opción | Para qué sirve |
