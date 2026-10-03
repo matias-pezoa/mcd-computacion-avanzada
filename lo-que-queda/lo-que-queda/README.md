@@ -44,9 +44,9 @@ La imagen se divide en una grilla de 27 × 48 celdas. Cada lectura de la mirada 
 
 | Desgaste | Efecto |
 |---|---|
-| 0 a 0,6 | Pixelado creciente (bloques de 1 a 60 px; cada bloque promedia sus colores) |
-| 0,35 a 0,7 | Los bloques se funden en manchones de color: imagen reducida a pocos tonos, desenfocada y más saturada |
-| 0,9 a 1 | Blanqueo; en 1 la celda queda blanca |
+| 0 a 0,4 | Pixelado creciente (bloques de 1 a 60 px; cada bloque promedia sus colores) |
+| 0,2 a 0,5 | Los bloques se funden en manchones de color: imagen reducida a pocos tonos, desenfocada y más saturada |
+| 0,75 a 1 | Blanqueo; en 1 la celda queda blanca |
 
 Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El desgaste se guarda por imagen y se **comparte entre todos los visitantes**: cada persona recibe las imágenes como las dejó la anterior.
 

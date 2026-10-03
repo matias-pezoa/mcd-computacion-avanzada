@@ -471,13 +471,14 @@ const GW = 27, GH = 48, RW = 540, RH = 960, CELL = 20;   // grilla de desgaste: 
 const DEFAULT_CFG = {
   calibSec: 20, feedLength: 30, missWindow: 8, latMin: 0.8, latMax: 3.5, minAmp: 0.04, kNoise: 3,
   stepsPerImage: 2, mode: 'manual', autoMs: 3000, invert: false,
-  wearRate: 0.08,       // desgaste por segundo de mirada en el centro de la mancha
+  wearRate: 0.25,       // desgaste por segundo de mirada en el centro de la mancha
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
+if(CFG.wearRate === 0.08) CFG.wearRate = DEFAULT_CFG.wearRate;   // configuraciones guardadas con la velocidad antigua
 function saveCfg(){ save('lqq2_cfg', CFG); }
 let STORE = Object.assign({visitors: 0, sessions: [], img: {}}, load('lqq2_store', {}));
 const GRIDS = {};
@@ -627,16 +628,16 @@ function layersFor(item){
   return L;
 }
 const WHITE = '#f4f4f1';
-// nivel 0 → original · 0–0,6 → pixelado creciente (los colores se promedian por bloque) · 0,35–0,7 → manchones de color · 0,9–1 → blanqueo hasta blanco total
+// nivel 0 → original · 0–0,4 → pixelado creciente (los colores se promedian por bloque) · 0,2–0,5 → manchones de color · 0,75–1 → blanqueo hasta blanco total
 function compose(item, wear, ctx){
   const L = layersFor(item), n = BLOCKS.length;
   ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = false; ctx.drawImage(L.color[0], 0, 0);
   for(let cy = 0; cy < GH; cy++) for(let cx = 0; cx < GW; cx++){
-    const l = wear[cy * GW + cx]; if(l < 0.004) continue;
-    const k = Math.round(clamp(l / 0.6, 0, 1) * (n - 1)), x = cx * CELL, y = cy * CELL;
+    const l = wear[cy * GW + cx]; if(l < 0.002) continue;
+    const k = Math.ceil(clamp(l / 0.4, 0, 1) * (n - 1)), x = cx * CELL, y = cy * CELL;
     ctx.globalAlpha = 1; ctx.drawImage(L.color[k], x, y, CELL, CELL, x, y, CELL, CELL);
-    const bs = smooth(0.35, 0.7, l); if(bs > 0){ ctx.globalAlpha = bs; ctx.drawImage(L.blob, x, y, CELL, CELL, x, y, CELL, CELL); }
-    const w = smooth(0.9, 1, l); if(w > 0){ ctx.globalAlpha = w; ctx.fillStyle = WHITE; ctx.fillRect(x, y, CELL, CELL); }
+    const bs = smooth(0.2, 0.5, l); if(bs > 0){ ctx.globalAlpha = bs; ctx.drawImage(L.blob, x, y, CELL, CELL, x, y, CELL, CELL); }
+    const w = smooth(0.75, 1, l); if(w > 0){ ctx.globalAlpha = w; ctx.fillStyle = WHITE; ctx.fillRect(x, y, CELL, CELL); }
   }
   ctx.globalAlpha = 1; return ctx.canvas;
 }
