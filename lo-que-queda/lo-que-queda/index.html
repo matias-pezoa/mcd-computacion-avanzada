@@ -360,7 +360,7 @@ body.visitante.operador .menu-dock{display:flex}
         <button id="btn-serial">Conectar por USB</button>
         <span class="badge" id="badge-serial">Desconectado</span>
       </div>
-      <p class="hint">Lee el potenciómetro (A0, simula la piel) y el encoder KY-040 del Arduino. Requiere Chrome o Edge, la página abierta por https o desde localhost y el Monitor Serie de Arduino IDE cerrado. Sin Arduino, la señal se simula con el control de 03 · Señal o la tecla R.</p>
+      <p class="hint">ESP32 con encoder KY-040: la perilla simula la respuesta de la piel y su botón pasa a la imagen siguiente. Requiere Chrome o Edge, la página abierta por https o desde localhost y el Monitor Serie del IDE cerrado. Sin ESP32, la señal se simula con el control de 03 · Señal o la tecla R.</p>
     </div>
   </div>
 
@@ -499,7 +499,7 @@ function shuffle(a){ for(let i = a.length - 1; i > 0; i--){ const j = Math.floor
 const GW = 27, GH = 48, RW = 540, RH = 960, CELL = 20;   // grilla de desgaste: 27×48 celdas de 20 px sobre una imagen 9:16
 const DEFAULT_CFG = {
   calibSec: 20, feedLength: 30, missWindow: 8, latMin: 0.8, latMax: 3.5, minAmp: 0.04, kNoise: 3,
-  stepsPerImage: 2, mode: 'manual', autoMs: 3000, invert: false,
+  mode: 'manual', autoMs: 3000, invert: false,
   wearRate: 0.1,        // desgaste por segundo de mirada en el centro de la mancha
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
@@ -839,8 +839,10 @@ const SIG = {buf: [], serialVal: null, serialAt: 0, simBase: 0.5, spikes: [], so
 function spikeSum(t){ let v = 0; for(const s of SIG.spikes){ const d = t - s.t0; if(d > 0) v += s.a * (1 - Math.exp(-d / 0.35)) * Math.exp(-d / 2.8); } return v; }
 function tickSignal(){
   const t = now(); let v;
-  if(SIG.serialVal !== null && t - SIG.serialAt < 1){ v = SIG.serialVal; SIG.source = 'Arduino'; }
-  else { v = SIG.simBase + (Math.random() - .5) * 0.004; SIG.source = SIG.serialVal === null ? 'Simulación' : 'Arduino sin datos'; }
+  const live = SIG.serialVal !== null && t - SIG.serialAt < 1, sld = $('#sld-nivel');
+  if(live){ v = SIG.serialVal; SIG.source = 'ESP32'; sld.value = v; }
+  else { v = SIG.simBase + (Math.random() - .5) * 0.004; SIG.source = SIG.serialVal === null ? 'Simulación' : 'ESP32 sin datos'; if(sld.disabled) sld.value = SIG.simBase; }
+  sld.disabled = live;
   if(CFG.invert) v = 1 - v;
   v += spikeSum(t);
   SIG.buf.push({t, v}); if(SIG.buf.length > 32000) SIG.buf.splice(0, SIG.buf.length - 30000);
@@ -849,27 +851,39 @@ function tickSignal(){
 setInterval(tickSignal, 40);
 function spike(){ SIG.spikes.push({t0: now(), a: 0.12 + Math.random() * 0.08}); }
 function samplesBetween(a, b){ const out = []; for(let i = SIG.buf.length - 1; i >= 0; i--){ const s = SIG.buf[i]; if(s.t < a) break; if(s.t <= b) out.push(s.v); } return out; }
+// Amplitud de la respuesta: mayor subida (de valle a pico) dentro de la ventana, medida sobre el mínimo corriente desde que
+// apareció la imagen. Una señal que solo baja (por ejemplo, el reinicio del estímulo) no produce subida.
 function amplitudeAt(onset){
-  const pre = samplesBetween(onset - 0.5, onset + CFG.latMin), win = samplesBetween(onset + CFG.latMin, onset + CFG.latMax);
-  if(!pre.length || !win.length) return 0;
-  return Math.max(0, Math.max(...win) - Math.min(...pre));
+  const a = onset + CFG.latMin, b = onset + CFG.latMax; let min = Infinity, best = 0, seen = false;
+  for(const s of SIG.buf){
+    if(s.t < onset) continue; if(s.t > b) break;
+    if(s.v < min) min = s.v;
+    if(s.t >= a){ seen = true; best = Math.max(best, s.v - min); }
+  }
+  return seen ? best : 0;
 }
-let advanceAcc = 0;
+let serialWriter = null;
+function sendSerial(line){ if(serialWriter) serialWriter.write(line + '\n').catch(() => {}); }
 async function connectSerial(){
-  if(!('serial' in navigator)){ log('Este navegador no permite conectar el Arduino. Usa Chrome o Edge de escritorio, por https o desde localhost.', 'aviso'); return; }
+  if(!('serial' in navigator)){ log('Este navegador no permite conectar el ESP32. Usa Chrome o Edge de escritorio, por https o desde localhost.', 'aviso'); return; }
   try{
     const port = await navigator.serial.requestPort(); await port.open({baudRate: 115200});
-    setBadge($('#badge-serial'), 'Conectado', 'on'); $('#t-conexion').textContent = 'USB'; log('Arduino conectado.');
-    const dec = new TextDecoderStream(); port.readable.pipeTo(dec.writable);
+    try{ await port.setSignals({dataTerminalReady: false, requestToSend: false}); }catch(e){}   // evita que abrir el puerto reinicie la placa
+    const enc = new TextEncoderStream(); enc.readable.pipeTo(port.writable).catch(() => {}); serialWriter = enc.writable.getWriter();
+    setBadge($('#badge-serial'), 'Conectado', 'on'); $('#t-conexion').textContent = 'USB'; log('Puerto abierto. Esperando al ESP32…');
+    setTimeout(() => sendSerial('?'), 400);
+    const dec = new TextDecoderStream(); port.readable.pipeTo(dec.writable).catch(() => {});
     const reader = dec.readable.getReader(); let buf = '';
     while(true){ const {value, done} = await reader.read(); if(done) break; buf += value; let i; while((i = buf.indexOf('\n')) >= 0){ handleLine(buf.slice(0, i).trim()); buf = buf.slice(i + 1); } }
-  }catch(e){ setBadge($('#badge-serial'), 'Error', 'error'); log('No se pudo conectar: ' + e.message, 'aviso'); }
+    serialWriter = null; setBadge($('#badge-serial'), 'Desconectado');
+  }catch(e){ serialWriter = null; setBadge($('#badge-serial'), 'Error', 'error'); log('No se pudo conectar: ' + e.message, 'aviso'); }
 }
+// ESP32 → página: G,<0–1023> señal · B botón · H,<dispositivo>,<versión> saludo · K,<grados> posición de la perilla · A,<n> acuse (se ignora)
 function handleLine(line){
-  if(line.startsWith('G,')){ const raw = parseInt(line.slice(2), 10); if(!isNaN(raw)){ SIG.serialVal = raw / 1023; SIG.serialAt = now(); } }
-  else if(line === 'E,1'){ if(screen === 'feed'){ advanceAcc++; if(advanceAcc >= CFG.stepsPerImage){ advanceAcc = 0; next(); } } }
-  else if(line === 'E,-1'){ advanceAcc = Math.max(0, advanceAcc - 1); }
-  else if(line === 'B'){ primaryAction(); }
+  if(line.startsWith('G,')){ const raw = parseInt(line.slice(2), 10); if(!isNaN(raw)){ SIG.serialVal = clamp(raw, 0, 1023) / 1023; SIG.serialAt = now(); } }
+  else if(line === 'B'){ if(screen === 'feed') next(); else primaryAction(); }
+  else if(line.startsWith('H,')){ const p = line.split(','); log(`ESP32 conectado (${p[1] || 'dispositivo'}, versión ${p[2] || '?'}).`); }
+  else if(line.startsWith('K,')){ const g = parseInt(line.slice(2), 10); if(!isNaN(g)) SIG.knob = g; }
 }
 
 /* ============================================================
@@ -897,7 +911,7 @@ async function beginVisit(){
   } else startSkinCalibration();
 }
 function startSkinCalibration(){
-  show('piel');
+  show('piel'); sendSerial('S,1');
   const t0 = now(), dur = CFG.calibSec;
   const iv = setInterval(() => {
     const e = now() - t0;
@@ -910,7 +924,7 @@ function finishSkinCalibration(a, b){
   const xs = samplesBetween(a, b), n = xs.length || 1;
   const m = xs.reduce((p, c) => p + c, 0) / n, sd = Math.sqrt(xs.reduce((p, c) => p + (c - m) ** 2, 0) / n);
   S.noise = +sd.toFixed(5); S.threshold = +Math.max(CFG.minAmp, CFG.kNoise * sd).toFixed(4);
-  S.feedStartT = now(); advanceAcc = 0;
+  S.feedStartT = now();
   show('feed'); sizeFeed(); next();
 }
 function next(){
@@ -923,6 +937,7 @@ function next(){
   if(!(item.id in S.wearStart)){ S.wearStart[item.id] = meanOf(G.wear); G.viewers++; }
   const it = {n: S.idx + 1, id: item.id, item, onset: t, amp: null, responded: null, dwell: null, gazeOn: 0, gazeOff: 0, viewHeat: new Float32Array(GW * GH), path: []};
   S.items.push(it); cur = it; renderDirty = true;
+  sendSerial('N,' + it.n);
   setTimeout(() => evaluate(it), (CFG.latMax + 0.1) * 1000);
   if(CFG.mode === 'auto') autoTimer = setTimeout(next, CFG.autoMs);
 }
@@ -969,7 +984,7 @@ function evaluate(it){
 function maybeFinish(){ if(S && S.ended && S.evaluated >= S.items.length) closeSession('fin'); }
 function closeSession(reason){
   if(S.closed) return;
-  S.closed = true; S.reason = reason; clearTimeout(autoTimer);
+  S.closed = true; S.reason = reason; clearTimeout(autoTimer); sendSerial('S,0');
   const lastSeen = cur;
   const tEnd = now(); S.endT = tEnd; cur = null;
   const last = S.items[S.items.length - 1]; if(last && last.dwell == null) last.dwell = +(tEnd - last.onset).toFixed(3);
@@ -1233,7 +1248,6 @@ const PARAMS = [
   ['extraFactor', 'Desgaste extra sin respuesta (×)', 0, 10, 0.5],
   ['gazeRadius', 'Radio de la mirada (fracción del ancho)', 0.03, 0.3, 0.01],
   ['clicksPerPoint', 'Clics por punto de calibración', 1, 15, 1],
-  ['stepsPerImage', 'Pasos de perilla por imagen', 1, 20, 1],
   ['autoMs', 'Intervalo automático (ms)', 500, 15000, 100]
 ];
 function buildParams(){

@@ -10,7 +10,9 @@ Usa el sistema de diseño de *Desnaturalización IA* (Computación Avanzada 2026
 - `corpus/`: imágenes del feed y `manifest.json` con su lista (ver `corpus/LEEME.md`). Si la lista está vacía se usan 12 imágenes de demostración.
 - `assets/fonts/`: tipografías (ver `assets/fonts/LEEME.md`). Si faltan, se usan fuentes del sistema.
 - `vendor/webgazer/`: WebGazer 3.5.3 y su modelo de rostro (MediaPipe), incluidos para que el eye tracking funcione sin conexión. Licencia GPL v3.
-- `lo_que_queda_entrada/lo_que_queda_entrada.ino`: sketch del Arduino (potenciómetro y encoder). No se ejecuta en la web.
+- `lo_que_queda_esp32/lo_que_queda_esp32.ino`: sketch del ESP32 DevKit con encoder KY-040, que simula la respuesta de la piel. No se ejecuta en la web.
+- `lo_que_queda_esp32_diagnostico/lo_que_queda_esp32_diagnostico.ino`: sketch para probar el encoder y el botón por el Monitor Serie.
+- `docs/ESP32_SIMULACION_GSR.md`: análisis de la respuesta galvánica, protocolo serial y esquemas de flujo. `docs/ESP32_CONEXIONES.md`: conexiones del ESP32 con el KY-040.
 - `LICENSE`: GPL v3 (necesaria por incluir WebGazer).
 
 ## Publicación en GitHub Pages
@@ -21,14 +23,14 @@ Los datos (desgaste, mapas, sesiones) se guardan en el `localStorage` del navega
 
 ## Cómo abrirlo en local
 
-La cámara y el Arduino solo funcionan desde `localhost` o https:
+La cámara y el ESP32 (USB) solo funcionan desde `localhost` o https:
 
 ```
 cd lo-que-queda
 python3 -m http.server 8000
 ```
 
-Abran `http://localhost:8000` en Chrome o Edge y den permiso de cámara. La tecla **D** muestra el dock durante la experiencia del visitante. El Arduino (Web Serial) solo funciona en Chrome o Edge de escritorio.
+Abran `http://localhost:8000` en Chrome o Edge y den permiso de cámara. La tecla **D** muestra el dock durante la experiencia del visitante. El ESP32 (Web Serial) solo funciona en Chrome o Edge de escritorio.
 
 ## Flujo del visitante
 
@@ -109,9 +111,15 @@ Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la 
 
 Todo se guarda en el navegador del computador de la exposición. Exporten con frecuencia.
 
-## Simular la piel sin sensor GSR
+## Simular la piel con el ESP32 y el encoder
 
-Igual que antes: el potenciómetro en A0 simula la piel y el encoder avanza el feed. Sin Arduino, usen el control deslizante de **03 · Señal** o la tecla **R**. Registren qué protocolo usaron (Mago de Oz o autorreporte).
+El ESP32 DevKit lee un encoder KY-040 (CLK en GPIO 32, DT en 33, SW en 25; alimentado con 3,3 V) y lo convierte en una señal con forma de respuesta galvánica de la piel. **Girar la perilla sube la «activación»**; al aparecer cada imagen la plataforma avisa por USB y la activación cae a 0 en 3 s. El **botón** de la perilla pasa a la imagen siguiente.
+
+1. Carguen `lo_que_queda_esp32/lo_que_queda_esp32.ino` en el ESP32 desde Arduino IDE (placa «ESP32 Dev Module») y cierren el Monitor Serie.
+2. Abran la página en Chrome o Edge, vayan a **01 · Conexión** y pulsen **Conectar por USB**.
+3. Durante la calibración de 20 s no giren la perilla; después, giren para «responder» a cada imagen.
+
+Detalles, parámetros y protocolo en `docs/ESP32_SIMULACION_GSR.md`. Sin ESP32, usen el control deslizante de **03 · Señal** o la tecla **R**. Registren qué protocolo usaron (Mago de Oz o autorreporte).
 
 ## Limitaciones que hay que declarar
 
