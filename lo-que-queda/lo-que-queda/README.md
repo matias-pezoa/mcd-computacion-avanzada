@@ -52,24 +52,27 @@ Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El des
 
 Si una imagen no provoca respuesta en la piel, se le suma un desgaste extra proporcional a cuánto se miró cada zona durante esa vista (por defecto, el doble del desgaste normal).
 
-## Fabricación: del desgaste a una pieza impresa en 3D (07 · Fabricación)
+## Fabricación: el desgaste como un jarrón impreso en 3D (07 · Fabricación)
 
-El panel del operador exporta el desgaste de cada imagen como un relieve en STL, en milímetros, listo para el slicer. La regla de diseño es:
+El desgaste se materializa como **un solo jarrón**. Las imágenes rodean el cuerpo, una al lado de la otra y de arriba abajo, y el desgaste deforma la cara exterior. La regla de diseño es:
 
 ```
-altura = base + relieve × (1 − desgaste)
+radio = perfil del jarrón + relieve × (1 − desgaste)
 ```
 
-Lo que nadie miró queda alto y lo gastado se rebaja hasta la base: la pieza es literalmente *lo que queda*. Con **Invertir**, lo gastado sube. La grilla de 27 × 48 se interpola (bilineal) a la resolución elegida, la pieza mantiene la proporción 9:16 y es un sólido cerrado con fondo plano en z = 0.
+Lo que nadie miró sobresale y lo gastado se hunde hasta el perfil liso: el jarrón es literalmente *lo que queda*. Con **Invertir**, lo gastado sobresale. El perfil tiene pie, panza, cuello y boca abierta; la cara interior es lisa, con fondo macizo y pie plano. La pieza es un sólido hueco y cerrado, en milímetros, lista para el slicer.
 
 | Parámetro | Por defecto |
 |---|---|
-| Ancho de la pieza | 60 mm (alto 106,7 mm) |
-| Base | 1,2 mm |
+| Alto | 120 mm |
+| Radio máximo (panza, sin relieve) | 35 mm |
+| Grosor de pared | 2 mm |
 | Relieve máximo | 4 mm |
 | Resolución | 3 vértices por celda |
 
-**Exportar bandeja** pone todas las imágenes del corpus en fila, separadas 5 mm, en un solo STL.
+- **Jarrón de la imagen**: una sola imagen da toda la vuelta.
+- **Jarrón con todo el corpus**: todas las imágenes alrededor del mismo jarrón.
+- **Descargar pieza 3D** (en el informe final): el jarrón de la visita, con las imágenes que vio el visitante.
 
 ## Validación y pruebas (02 · Mirada)
 
@@ -90,7 +93,7 @@ Para validar el eye tracking: activen el punto de mirada, miren esquinas y objet
 - **02 Mapas de calor**: por cada imagen vista, cuatro paneles: original, tu mirada, mirada acumulada de todos los visitantes y cómo la dejaste. Debajo, los segundos de mirada y la **zona más vista** (en una división de 3 × 3) con su porcentaje. Cada fila se descarga como PNG.
 - **03 Desgaste**: cuánto más gastadas quedaron las imágenes.
 
-Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar la pieza 3D de la visita (STL: una placa por imagen vista, con el desgaste tal como quedó), imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
+Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar la pieza 3D de la visita (STL: un jarrón rodeado por las imágenes que vio, con el desgaste tal como quedó), imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
 
 ## Datos (06 · Datos)
 

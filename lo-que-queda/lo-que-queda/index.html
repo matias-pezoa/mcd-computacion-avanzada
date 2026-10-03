@@ -436,22 +436,23 @@ body.visitante.operador .menu-dock{display:flex}
 
   <div class="menu-item">
     <button class="menu-trigger" type="button" data-target="p-fab" aria-expanded="false" aria-controls="p-fab">
-      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">STL</span>
+      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">Jarrón STL</span>
     </button>
     <div class="menu-panel" id="p-fab" hidden>
       <div class="grid">
         <label>Imagen<select id="fab-img"></select></label>
-        <label>Ancho de la pieza (mm)<input type="number" id="fab-width" min="20" max="250" step="1"></label>
-        <label>Base (mm)<input type="number" id="fab-base" min="0.4" max="10" step="0.1"></label>
+        <label>Alto del jarrón (mm)<input type="number" id="fab-height" min="30" max="300" step="1"></label>
+        <label>Radio máximo (mm)<input type="number" id="fab-radius" min="10" max="150" step="1"></label>
+        <label>Grosor de pared (mm)<input type="number" id="fab-wall" min="0.8" max="10" step="0.1"></label>
         <label>Relieve máximo (mm)<input type="number" id="fab-relief" min="0.5" max="30" step="0.1"></label>
         <label>Resolución (vértices por celda)<input type="number" id="fab-res" min="1" max="8" step="1"></label>
-        <label class="check"><input type="checkbox" id="fab-invert">Invertir: lo gastado sube</label>
+        <label class="check"><input type="checkbox" id="fab-invert">Invertir: lo gastado sobresale</label>
       </div>
       <div class="panel-acciones">
-        <button id="btn-stl">Exportar STL de la imagen</button>
-        <button id="btn-stl-todas">Exportar bandeja con todas (STL)</button>
+        <button id="btn-stl">Jarrón de la imagen (STL)</button>
+        <button id="btn-stl-todas">Jarrón con todo el corpus (STL)</button>
       </div>
-      <p class="hint">Regla: altura = base + relieve × (1 − desgaste). Lo que nadie miró queda alto; lo gastado se rebaja hasta la base. La pieza mantiene la proporción 9:16 y sale en milímetros, lista para el slicer, apoyada sobre su cara plana.</p>
+      <p class="hint">Un solo jarrón: las imágenes rodean el cuerpo una al lado de la otra y el desgaste deforma la superficie. Regla: radio = perfil + relieve × (1 − desgaste). Lo que nadie miró sobresale; lo gastado se hunde hasta el perfil liso. Pieza hueca y cerrada, en milímetros, con fondo plano.</p>
     </div>
   </div>
 </nav>
@@ -499,7 +500,7 @@ const DEFAULT_CFG = {
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
-  fabWidth: 60, fabBase: 1.2, fabRelief: 4, fabRes: 3, fabInvert: false,   // relieve para impresión 3D (mm)
+  fabHeight: 120, fabRadius: 35, fabWall: 2, fabRelief: 4, fabRes: 3, fabInvert: false,   // jarrón para impresión 3D (mm)
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
@@ -1227,12 +1228,11 @@ function trajectoryCSV(sessions){
 }
 $('#btn-trayectorias').addEventListener('click', () => download('lo-que-queda-trayectorias.csv', trajectoryCSV(STORE.sessions), 'text/csv'));
 $('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; if(!s) return; download(`lo-que-queda-trayectoria-${s.visitor}.csv`, trajectoryCSV([summary(s)]), 'text/csv'); });
-// la pieza de esta visita: una placa por cada imagen que vio, con el desgaste tal como quedó
+// la pieza de esta visita: un jarrón rodeado por las imágenes que vio, con el desgaste tal como quedó
 $('#btn-stl-sesion').addEventListener('click', () => {
   const s = lastS; if(!s) return;
-  const ids = [...new Set(s.items.map(i => i.id))], tris = [], gap = 5;
-  ids.forEach((id, k) => reliefTriangles(gridsFor(id).wear, k * (CFG.fabWidth + gap), tris));
-  download(`lo-que-queda-pieza-${s.visitor}.stl`, trianglesToSTL(tris, 'visita ' + s.visitor), 'model/stl');
+  const ids = [...new Set(s.items.map(i => i.id))];
+  download(`lo-que-queda-jarron-${s.visitor}.stl`, trianglesToSTL(vaseTriangles(ids.map(id => gridsFor(id).wear)), 'visita ' + s.visitor), 'model/stl');
 });
 $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
@@ -1248,35 +1248,49 @@ function sampleGrid(a, u, v){
   const top = a[y0 * GW + x0] * (1 - fx) + a[y0 * GW + x1] * fx, bot = a[y1 * GW + x0] * (1 - fx) + a[y1 * GW + x1] * fx;
   return top * (1 - fy) + bot * fy;
 }
-// Pieza cerrada (manifold): superficie superior según el desgaste, paredes laterales y fondo plano en z = 0.
-function reliefTriangles(wear, ox, tris){
-  const W = CFG.fabWidth, H = W * 16 / 9, res = Math.max(1, Math.round(CFG.fabRes));
-  const nx = GW * res, ny = GH * res, dx = W / nx, dy = H / ny;
-  const z = (i, j) => { const w = sampleGrid(wear, i / nx, j / ny); return CFG.fabBase + CFG.fabRelief * (CFG.fabInvert ? w : 1 - w); };
-  const P = (i, j, top) => [ox + i * dx, H - j * dy, top ? z(i, j) : 0];   // j = 0 es el borde superior de la imagen
+// Perfil del jarrón (radio relativo según la altura t de 0 a 1): pie, panza, cuello y boca abierta.
+const VASE_PROFILE = [[0, 0.72], [0.35, 1], [0.78, 0.58], [1, 0.7]];
+function vaseProfile(t){
+  for(let k = 1; k < VASE_PROFILE.length; k++){
+    const [t0, r0] = VASE_PROFILE[k - 1], [t1, r1] = VASE_PROFILE[k];
+    if(t <= t1){ const f = (1 - Math.cos(Math.PI * (t - t0) / (t1 - t0))) / 2; return r0 + (r1 - r0) * f; }
+  }
+  return VASE_PROFILE[VASE_PROFILE.length - 1][1];
+}
+// Un solo jarrón hueco y cerrado (manifold). Las imágenes rodean el cuerpo, una al lado de la otra, de arriba abajo;
+// el desgaste empuja la cara exterior hacia afuera: radio = perfil + relieve × (1 − desgaste). La cara interior es lisa.
+function vaseTriangles(wears){
+  const N = wears.length, H = CFG.fabHeight, R = CFG.fabRadius, wall = CFG.fabWall, bottom = Math.max(wall, 2);
+  const res = Math.max(1, Math.round(CFG.fabRes)), na = clamp(N * GW * res, 96, 900), nz = GH * res;
+  const tris = [];
   const add = (a, b, c, n) => {   // corrige el orden para que la normal apunte hacia afuera
     const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
     const cr = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
     tris.push(cr[0]*n[0] + cr[1]*n[1] + cr[2]*n[2] >= 0 ? [n, a, b, c] : [n, a, c, b]);
   };
-  const Z = [0, 0, 1];
-  for(let j = 0; j < ny; j++) for(let i = 0; i < nx; i++){
-    const a = P(i, j, 1), b = P(i + 1, j, 1), c = P(i + 1, j + 1, 1), d = P(i, j + 1, 1);
-    add(a, d, c, Z); add(a, c, b, Z);
+  const ang = i => 2 * Math.PI * (i % na) / na;
+  const outer = (i, j) => {   // j = 0 en el pie, j = nz en la boca
+    const t = j / nz, phi = (i % na) / na * N, k = Math.min(N - 1, Math.floor(phi));
+    const w = sampleGrid(wears[k], phi - k, 1 - t), r = R * vaseProfile(t) + CFG.fabRelief * (CFG.fabInvert ? w : 1 - w);
+    return [r * Math.cos(ang(i)), r * Math.sin(ang(i)), t * H];
+  };
+  const inner = (i, j) => {   // j = 0 en el fondo interior, j = nz en la boca
+    const z = bottom + (H - bottom) * j / nz, r = R * vaseProfile(z / H) - wall;
+    return [r * Math.cos(ang(i)), r * Math.sin(ang(i)), z];
+  };
+  const O = [], I = [];
+  for(let j = 0; j <= nz; j++){ O.push([]); I.push([]); for(let i = 0; i < na; i++){ O[j].push(outer(i, j)); I[j].push(inner(i, j)); } }
+  for(let i = 0; i < na; i++){
+    const i1 = (i + 1) % na, a = ang(i + 0.5), out = [Math.cos(a), Math.sin(a), 0], inn = [-out[0], -out[1], 0];
+    for(let j = 0; j < nz; j++){
+      add(O[j][i], O[j][i1], O[j + 1][i1], out); add(O[j][i], O[j + 1][i1], O[j + 1][i], out);
+      add(I[j][i], I[j][i1], I[j + 1][i1], inn); add(I[j][i], I[j + 1][i1], I[j + 1][i], inn);
+    }
+    add(O[nz][i], O[nz][i1], I[nz][i1], [0, 0, 1]); add(O[nz][i], I[nz][i1], I[nz][i], [0, 0, 1]);   // borde de la boca
+    add([0, 0, 0], O[0][i], O[0][i1], [0, 0, -1]);                                                   // pie
+    add([0, 0, bottom], I[0][i], I[0][i1], [0, 0, 1]);                                               // fondo interior
   }
-  // contorno en orden: borde superior, derecho, inferior, izquierdo
-  const ring = [];
-  for(let i = 0; i < nx; i++) ring.push([i, 0, [0, 1, 0]]);
-  for(let j = 0; j < ny; j++) ring.push([nx, j, [1, 0, 0]]);
-  for(let i = nx; i > 0; i--) ring.push([i, ny, [0, -1, 0]]);
-  for(let j = ny; j > 0; j--) ring.push([0, j, [-1, 0, 0]]);
-  const ctr = [ox + W / 2, H / 2, 0];
-  for(let k = 0; k < ring.length; k++){
-    const [i0, j0, n] = ring[k], [i1, j1] = ring[(k + 1) % ring.length];
-    const pt = P(i0, j0, 1), qt = P(i1, j1, 1), pb = P(i0, j0, 0), qb = P(i1, j1, 0);
-    add(pb, qb, qt, n); add(pb, qt, pt, n);
-    add(ctr, pb, qb, [0, 0, -1]);
-  }
+  return tris;
 }
 function trianglesToSTL(tris, name){
   const buf = new ArrayBuffer(84 + tris.length * 50), dv = new DataView(buf);
@@ -1292,7 +1306,7 @@ function fillFabSelect(){
   sel.innerHTML = corpus.map(c => `<option value="${c.id}">${c.id} · ${(meanOf(gridsFor(c.id).wear) * 100).toFixed(1)} % gastada</option>`).join('');
   if(corpus.some(c => c.id === prev)) sel.value = prev;
 }
-[['#fab-width', 'fabWidth'], ['#fab-base', 'fabBase'], ['#fab-relief', 'fabRelief'], ['#fab-res', 'fabRes']].forEach(([sel, key]) => {
+[['#fab-height', 'fabHeight'], ['#fab-radius', 'fabRadius'], ['#fab-wall', 'fabWall'], ['#fab-relief', 'fabRelief'], ['#fab-res', 'fabRes']].forEach(([sel, key]) => {
   const inp = $(sel); inp.value = CFG[key];
   inp.addEventListener('change', () => { const v = parseFloat(inp.value); if(!isNaN(v) && v > 0){ CFG[key] = v; saveCfg(); } });
 });
@@ -1300,19 +1314,19 @@ $('#fab-invert').checked = CFG.fabInvert;
 $('#fab-invert').addEventListener('change', e => { CFG.fabInvert = e.target.checked; saveCfg(); });
 $('#fab-img').addEventListener('focus', fillFabSelect);
 document.querySelector('[data-target="p-fab"]').addEventListener('click', fillFabSelect);
+function exportVase(ids, name, file){
+  const tris = vaseTriangles(ids.map(id => gridsFor(id).wear));
+  download(file, trianglesToSTL(tris, name), 'model/stl');
+  log(`Jarrón STL exportado: ${ids.length} ${ids.length === 1 ? 'imagen' : 'imágenes'} alrededor, ${CFG.fabHeight} mm de alto (${tris.length} triángulos).`);
+}
 $('#btn-stl').addEventListener('click', () => {
   if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
-  const id = $('#fab-img').value || corpus[0].id, tris = [];
-  reliefTriangles(gridsFor(id).wear, 0, tris);
-  download(`lo-que-queda-${fileSafe(id)}.stl`, trianglesToSTL(tris, id), 'model/stl');
-  log(`STL exportado: ${id} (${tris.length} triángulos, ${CFG.fabWidth} × ${(CFG.fabWidth * 16 / 9).toFixed(1)} mm).`);
+  const id = $('#fab-img').value || corpus[0].id;
+  exportVase([id], id, `lo-que-queda-jarron-${fileSafe(id)}.stl`);
 });
 $('#btn-stl-todas').addEventListener('click', () => {
   if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
-  const tris = [], gap = 5;
-  corpus.forEach((c, k) => reliefTriangles(gridsFor(c.id).wear, k * (CFG.fabWidth + gap), tris));
-  download('lo-que-queda-bandeja.stl', trianglesToSTL(tris, 'bandeja'), 'model/stl');
-  log(`Bandeja STL exportada: ${corpus.length} piezas en fila (${tris.length} triángulos).`);
+  exportVase(corpus.map(c => c.id), 'corpus', 'lo-que-queda-jarron-corpus.stl');
 });
 
 /* ---------- ventana 03 · Señal y lectura en vivo ---------- */
