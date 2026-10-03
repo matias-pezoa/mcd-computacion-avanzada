@@ -52,27 +52,39 @@ Cuando todas las celdas llegan a 1, la imagen queda completamente blanca. El des
 
 Si una imagen no provoca respuesta en la piel, se le suma un desgaste extra proporcional a cuánto se miró cada zona durante esa vista (por defecto, el doble del desgaste normal).
 
-## Fabricación: el desgaste como un jarrón impreso en 3D (07 · Fabricación)
+## Fabricación: la visita como figura abstracta y G-code (07 · Fabricación)
 
-El desgaste se materializa como **un solo jarrón**. Las imágenes rodean el cuerpo, una al lado de la otra y de arriba abajo, y el desgaste deforma la cara exterior. La regla de diseño es:
+Cada visita se materializa como **una sola figura abstracta**, y el G-code (la trayectoria de la boquilla) se genera directamente desde los datos, sin pasar por un slicer. La figura crece con el tiempo de la visita: cada capa es un instante, y su contorno es una curva cerrada alrededor de un centro.
 
-```
-radio = perfil del jarrón + relieve × (1 − desgaste)
-```
+| Dato de la visita | Qué le hace a la figura |
+|---|---|
+| Posición de la mirada (trayectoria suavizada) | Mueve el centro de la capa: la figura se inclina hacia donde se miró |
+| Velocidad de la mirada | Pliegues: una mirada inquieta da más pliegues y más profundos |
+| Desgaste de la imagen vista (leído de arriba abajo mientras se la miraba) | Hunde el contorno donde la imagen está gastada |
+| Desgaste medio de la imagen | Adelgaza la figura |
+| Imagen sin respuesta en la piel | La contrae y la tuerce; la torsión se acumula |
+| Respuesta en la piel | La hincha según la amplitud |
 
-Lo que nadie miró sobresale y lo gastado se hunde hasta el perfil liso: el jarrón es literalmente *lo que queda*. Con **Invertir**, lo gastado sobresale. El perfil tiene pie, panza, cuello y boca abierta; la cara interior es lisa, con fondo macizo y pie plano. La pieza es un sólido hueco y cerrado, en milímetros, lista para el slicer.
+Después la forma se suaviza en altura (≈ 1,5 mm) y se limita el voladizo para que se imprima sin soportes: cada punto puede salirse de la capa anterior como máximo `altura de capa × tan(ángulo máximo)`.
+
+**G-code**: para Marlin, en coordenadas absolutas. Calienta la cama y la boquilla, hace home y una línea de purga. Imprime un fondo macizo en anillos concéntricos y luego **una espiral continua de una sola pared** (modo jarrón): la Z sube sin detenerse a lo largo de cada vuelta. La figura se centra en la cama y no se exporta si no cabe.
 
 | Parámetro | Por defecto |
 |---|---|
-| Alto | 120 mm |
-| Radio máximo (panza, sin relieve) | 35 mm |
-| Grosor de pared | 2 mm |
-| Relieve máximo | 4 mm |
-| Resolución | 3 vértices por celda |
+| Intensidad de la deformación | 0,8 (0–1) |
+| Cuánto sigue a la mirada | 0,6 (0–1) |
+| Alto / radio base | 120 mm / 30 mm |
+| Ángulo máximo de voladizo | 50° |
+| Capa / boquilla / filamento | 0,2 / 0,4 / 1,75 mm |
+| Temperaturas | 210 °C boquilla, 60 °C cama |
+| Velocidad | 25 mm/s |
+| Cama | 220 × 220 mm |
 
-- **Jarrón de la imagen**: una sola imagen da toda la vuelta.
-- **Jarrón con todo el corpus**: todas las imágenes alrededor del mismo jarrón.
-- **Descargar pieza 3D** (en el informe final): el jarrón de la visita, con las imágenes que vio el visitante.
+**Antes de imprimir**, revisa temperaturas, filamento y tamaño de cama para tu impresora, y mira el archivo en la vista previa de G-code del slicer (PrusaSlicer y Cura la tienen). También se exporta un **STL** de la misma forma, para verla en un visor o laminarla en modo jarrón con tu propio perfil.
+
+Dónde se descarga:
+- **Informe final**: vista previa de la figura de la visita, **Descargar G-code de tu figura** y **Descargar figura 3D (STL)**.
+- **Panel 07** (tecla D): elegir cualquier visita registrada, ajustar los parámetros, ver la vista previa y exportar G-code o STL. Las visitas sin trayectoria (anteriores a que se guardara) salen sin inclinación ni pliegues de mirada.
 
 ## Validación y pruebas (02 · Mirada)
 
@@ -93,7 +105,7 @@ Para validar el eye tracking: activen el punto de mirada, miren esquinas y objet
 - **02 Mapas de calor**: por cada imagen vista, cuatro paneles: original, tu mirada, mirada acumulada de todos los visitantes y cómo la dejaste. Debajo, los segundos de mirada y la **zona más vista** (en una división de 3 × 3) con su porcentaje. Cada fila se descarga como PNG.
 - **03 Desgaste**: cuánto más gastadas quedaron las imágenes.
 
-Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar la pieza 3D de la visita (STL: un jarrón rodeado por las imágenes que vio, con el desgaste tal como quedó), imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
+Botones: descargar todos los mapas en una lámina PNG, exportar los datos de la sesión (incluida la trayectoria de la mirada en cada imagen y la señal completa), exportar la trayectoria de la mirada de la visita (CSV), descargar el G-code y el STL de la figura abstracta de la visita, imprimir el informe, borrar el registro y terminar. Borrar elimina la sesión y su mapa personal; el desgaste de las imágenes se mantiene, y el informe lo dice.
 
 ## Datos (06 · Datos)
 

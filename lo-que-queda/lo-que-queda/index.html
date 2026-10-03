@@ -144,6 +144,7 @@ body.operador #s-informe{padding-right:calc(var(--dock-w) + var(--dock-edge) + 4
 .mapa-datos{display:flex;flex-wrap:wrap;justify-content:space-between;gap:6px 20px;margin-top:12px;font-family:var(--font-mono);font-size:10px;letter-spacing:.03em;color:var(--gray-1)}
 .mapa-datos b{font-weight:400;color:var(--white)}
 .texto-informe{max-width:40rem;font-size:15px;line-height:1.6;color:var(--gray-1);margin:0}
+.figura-preview{display:block;width:min(100%,360px);aspect-ratio:1;margin-top:20px;border:1px solid var(--line-soft)}
 .acciones{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:20px}
 
 /* ---------- botones y formularios ---------- */
@@ -316,11 +317,13 @@ body.visitante.operador .menu-dock{display:flex}
       <div class="seccion">
         <h3 class="seccion-titulo"><span class="num">03</span>Desgaste</h3>
         <p class="texto-informe" id="inf-desgaste"></p>
+        <canvas id="inf-figura" class="figura-preview" width="640" height="640" aria-label="Vista previa de la figura impresa que deja tu visita"></canvas>
         <div class="acciones">
           <button id="btn-png-todos">Descargar todos los mapas</button>
           <button id="btn-datos-sesion">Exportar datos de la sesión</button>
           <button id="btn-trayectoria-sesion">Exportar trayectoria de la mirada (CSV)</button>
-          <button id="btn-stl-sesion">Descargar pieza 3D (STL)</button>
+          <button id="btn-gcode-sesion">Descargar G-code de tu figura</button>
+          <button id="btn-stl-sesion">Descargar figura 3D (STL)</button>
           <button id="btn-imprimir">Imprimir informe</button>
           <button id="btn-borrar">Borrar mi registro</button>
           <button id="btn-terminar" class="lleno">Terminar</button>
@@ -436,23 +439,32 @@ body.visitante.operador .menu-dock{display:flex}
 
   <div class="menu-item">
     <button class="menu-trigger" type="button" data-target="p-fab" aria-expanded="false" aria-controls="p-fab">
-      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">Jarrón STL</span>
+      <span><span class="num">07</span>Fabricación</span><span class="menu-trigger-estado">G-code</span>
     </button>
     <div class="menu-panel" id="p-fab" hidden>
       <div class="grid">
-        <label>Imagen<select id="fab-img"></select></label>
-        <label>Alto del jarrón (mm)<input type="number" id="fab-height" min="30" max="300" step="1"></label>
-        <label>Radio máximo (mm)<input type="number" id="fab-radius" min="10" max="150" step="1"></label>
-        <label>Grosor de pared (mm)<input type="number" id="fab-wall" min="0.8" max="10" step="0.1"></label>
-        <label>Relieve máximo (mm)<input type="number" id="fab-relief" min="0.5" max="30" step="0.1"></label>
-        <label>Resolución (vértices por celda)<input type="number" id="fab-res" min="1" max="8" step="1"></label>
-        <label class="check"><input type="checkbox" id="fab-invert">Invertir: lo gastado sobresale</label>
+        <label>Visita<select id="fab-sesion"></select></label>
+        <label>Intensidad de la deformación (0–1)<input type="number" id="fab-drama" min="0" max="1" step="0.05"></label>
+        <label>Cuánto sigue a la mirada (0–1)<input type="number" id="fab-sway" min="0" max="1" step="0.05"></label>
+        <label>Alto (mm)<input type="number" id="fab-height" min="20" max="300" step="1"></label>
+        <label>Radio base (mm)<input type="number" id="fab-radius" min="8" max="100" step="1"></label>
+        <label>Ángulo máximo de voladizo (°)<input type="number" id="fab-maxangle" min="20" max="70" step="1"></label>
+        <label>Altura de capa (mm)<input type="number" id="fab-layer" min="0.08" max="0.4" step="0.02"></label>
+        <label>Boquilla (mm)<input type="number" id="fab-nozzle" min="0.2" max="1.2" step="0.05"></label>
+        <label>Filamento (mm)<input type="number" id="fab-filament" min="1.75" max="2.85" step="0.05"></label>
+        <label>Temperatura boquilla (°C)<input type="number" id="fab-temp" min="170" max="300" step="5"></label>
+        <label>Temperatura cama (°C)<input type="number" id="fab-bedtemp" min="0" max="120" step="5"></label>
+        <label>Velocidad de impresión (mm/s)<input type="number" id="fab-speed" min="5" max="150" step="1"></label>
+        <label>Cama X (mm)<input type="number" id="fab-bedx" min="80" max="500" step="1"></label>
+        <label>Cama Y (mm)<input type="number" id="fab-bedy" min="80" max="500" step="1"></label>
       </div>
+      <canvas id="fab-preview" class="figura-preview" width="640" height="640" aria-label="Vista previa de la figura"></canvas>
       <div class="panel-acciones">
-        <button id="btn-stl">Jarrón de la imagen (STL)</button>
-        <button id="btn-stl-todas">Jarrón con todo el corpus (STL)</button>
+        <button id="btn-fab-preview">Vista previa</button>
+        <button id="btn-gcode">Exportar G-code</button>
+        <button id="btn-stl">Exportar STL</button>
       </div>
-      <p class="hint">Un solo jarrón: las imágenes rodean el cuerpo una al lado de la otra y el desgaste deforma la superficie. Regla: radio = perfil + relieve × (1 − desgaste). Lo que nadie miró sobresale; lo gastado se hunde hasta el perfil liso. Pieza hueca y cerrada, en milímetros, con fondo plano.</p>
+      <p class="hint">La figura crece con el tiempo de la visita: cada capa es un instante. La mirada mueve el centro de la capa (la figura se inclina hacia donde miraste) y su velocidad la llena de pliegues; el desgaste de la imagen que estabas viendo hunde el contorno; cada imagen que no provocó respuesta en la piel la contrae y la tuerce. El G-code imprime en espiral continua (modo jarrón, una sola pared) tras un fondo macizo, para Marlin, en coordenadas absolutas. Revisa temperaturas y tamaño de cama antes de imprimir y mira el archivo en la vista previa de tu slicer.</p>
     </div>
   </div>
 </nav>
@@ -500,7 +512,9 @@ const DEFAULT_CFG = {
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
-  fabHeight: 120, fabRadius: 35, fabWall: 2, fabRelief: 4, fabRes: 3, fabInvert: false,   // jarrón para impresión 3D (mm)
+  // figura para impresión 3D (mm): forma y trayectoria de la boquilla salen de la visita
+  fabHeight: 120, fabRadius: 30, fabDrama: 0.8, fabSway: 0.6, fabMaxAngle: 50,
+  fabLayer: 0.2, fabNozzle: 0.4, fabFilament: 1.75, fabTemp: 210, fabBedTemp: 60, fabSpeed: 25, fabBedX: 220, fabBedY: 220,
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
@@ -995,6 +1009,7 @@ function showReport(){
   const ids = Object.keys(s.wearStart);
   const added = ids.reduce((p, id) => p + (s.wearEnd[id] - s.wearStart[id]), 0) / Math.max(1, ids.length);
   $('#inf-desgaste').textContent = `Las ${ids.length} imágenes que viste quedaron en promedio ${(added * 100).toFixed(1)} puntos más gastadas, justo en las zonas que miraste. Quien venga después las verá así. Ese desgaste no se puede borrar.`;
+  try{ drawForm($('#inf-figura'), formLayers(summary(s))); }catch(e){ log('Vista previa de la figura: ' + e.message, 'aviso'); }
   const bb = $('#btn-borrar'); bb.disabled = false; bb.textContent = 'Borrar mi registro';
   drawCurve(s); buildMaps(s);
 }
@@ -1228,12 +1243,9 @@ function trajectoryCSV(sessions){
 }
 $('#btn-trayectorias').addEventListener('click', () => download('lo-que-queda-trayectorias.csv', trajectoryCSV(STORE.sessions), 'text/csv'));
 $('#btn-trayectoria-sesion').addEventListener('click', () => { const s = lastS; if(!s) return; download(`lo-que-queda-trayectoria-${s.visitor}.csv`, trajectoryCSV([summary(s)]), 'text/csv'); });
-// la pieza de esta visita: un jarrón rodeado por las imágenes que vio, con el desgaste tal como quedó
-$('#btn-stl-sesion').addEventListener('click', () => {
-  const s = lastS; if(!s) return;
-  const ids = [...new Set(s.items.map(i => i.id))];
-  download(`lo-que-queda-jarron-${s.visitor}.stl`, trianglesToSTL(vaseTriangles(ids.map(id => gridsFor(id).wear)), 'visita ' + s.visitor), 'model/stl');
-});
+// la figura de esta visita: G-code (trayectoria de la boquilla) y STL de la misma forma
+$('#btn-gcode-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'gcode'); });
+$('#btn-stl-sesion').addEventListener('click', () => { if(lastS) exportForm(summary(lastS), 'stl'); });
 $('#btn-acumulados').addEventListener('click', () => {
   const fake = {visitor: 'todos', startISO: new Date().toISOString(), reason: 'fin', heat: {}};
   for(const c of corpus) fake.heat[c.id] = gridsFor(c.id).heat;
@@ -1248,49 +1260,174 @@ function sampleGrid(a, u, v){
   const top = a[y0 * GW + x0] * (1 - fx) + a[y0 * GW + x1] * fx, bot = a[y1 * GW + x0] * (1 - fx) + a[y1 * GW + x1] * fx;
   return top * (1 - fy) + bot * fy;
 }
-// Perfil del jarrón (radio relativo según la altura t de 0 a 1): pie, panza, cuello y boca abierta.
-const VASE_PROFILE = [[0, 0.72], [0.35, 1], [0.78, 0.58], [1, 0.7]];
-function vaseProfile(t){
-  for(let k = 1; k < VASE_PROFILE.length; k++){
-    const [t0, r0] = VASE_PROFILE[k - 1], [t1, r1] = VASE_PROFILE[k];
-    if(t <= t1){ const f = (1 - Math.cos(Math.PI * (t - t0) / (t1 - t0))) / 2; return r0 + (r1 - r0) * f; }
+// La visita se vuelve una pila de capas. Cada capa es un instante de la visita y su contorno es una curva cerrada
+// r(θ) alrededor de un centro (cx, cy):
+//   · centro       ← la mirada suavizada en ese instante (la figura se inclina hacia donde se miró)
+//   · pliegues     ← la velocidad de la mirada (mirada inquieta = más pliegues y más profundos)
+//   · hundimientos ← el desgaste de la imagen vista, leído de arriba abajo mientras se la miraba
+//   · contracción y torsión ← cada imagen que no provocó respuesta en la piel; la respuesta la hincha
+// Después se suaviza en altura y se limita el voladizo para que se pueda imprimir sin soportes.
+const FORM_NA = 180;
+function formLayers(sess){
+  const items = (sess.items || []).filter(i => i.imagen != null);
+  if(!items.length) throw new Error('La visita no tiene imágenes vistas.');
+  const D = CFG.fabDrama, R = CFG.fabRadius, lh = CFG.fabLayer, nL = Math.max(10, Math.round(CFG.fabHeight / lh)), na = FORM_NA;
+  const segs = []; let T = 0;
+  for(const it of items){ const d = Math.max(0.5, it.permanencia || 3); segs.push({it, t0: T, d, W: gridsFor(it.imagen).wear}); T += d; }
+  // mirada: puntos válidos de toda la visita, en el tiempo absoluto del feed
+  const pts = []; for(const it of items) for(const q of it.trayectoria || []) if(q[1] !== null) pts.push(q);
+  const sig = 0.6;
+  const gazeAt = ta => {
+    let sw = 0, sx = 0, sy = 0, sp = 0, ns = 0, prev = null;
+    for(const q of pts){
+      if(q[0] < ta - 3 * sig) { prev = q; continue; } if(q[0] > ta + 3 * sig) break;
+      const w = Math.exp(-((q[0] - ta) ** 2) / (2 * sig * sig)); sw += w; sx += w * q[1]; sy += w * q[2];
+      if(prev && q[0] > prev[0]) { sp += Math.hypot(q[1] - prev[1], q[2] - prev[2]) / (q[0] - prev[0]); ns++; }
+      prev = q;
+    }
+    return sw > 0 ? {x: sx / sw, y: sy / sw, v: ns ? sp / ns : 0} : null;
+  };
+  const harmPhase = [...Array(10)].map((_, h) => h * 2.399);   // fases fijas (ángulo áureo) para que los pliegues no se alineen
+  const raw = []; let lastGaze = {x: 0.5, y: 0.5, v: 0}, twistBase = 0, k = 0;
+  for(let i = 0; i < nL; i++){
+    const tau = (i + 0.5) / nL * T;
+    while(k < segs.length - 1 && tau > segs[k].t0 + segs[k].d){ if(segs[k].it.respondio === false) twistBase += 0.45 * D; k++; }
+    const sg = segs[k], it = sg.it, p = clamp((tau - sg.t0) / sg.d, 0, 1);
+    const g = gazeAt((it.t || 0) + p * sg.d) || lastGaze; lastGaze = g;
+    const twist = twistBase + (it.respondio === false ? 0.45 * D * p : 0);
+    const meanW = meanOf(sg.W);
+    let base = R * (1 - 0.45 * D * meanW);
+    if(it.respondio === false) base *= 1 - 0.3 * D;
+    else if(it.respondio) base *= 1 + 0.25 * D * clamp((it.amplitud || 0) * 5, 0, 1);
+    const sp = clamp(g.v / 1.2, 0, 1), A = D * (0.08 + 0.4 * sp), fc = 2 + 6 * sp;
+    const r = new Float32Array(na);
+    for(let a = 0; a < na; a++){
+      const th = a / na * 2 * Math.PI, tt = th - twist, f = ((tt / (2 * Math.PI)) % 1 + 1) % 1;
+      let hs = 0, hw = 0;
+      for(let h = 2; h <= 9; h++){ const w = Math.exp(-((h - fc) ** 2) / 2); hs += w * Math.sin(h * tt + harmPhase[h]); hw += w; }
+      const wear = sampleGrid(sg.W, 1 - Math.abs(2 * f - 1), p);
+      r[a] = Math.max(3, base * (1 + A * hs / hw) * (1 - 0.6 * D * wear));
+    }
+    raw.push({r, cx: (g.x - 0.5) * 2 * R * CFG.fabSway, cy: (0.5 - g.y) * 2 * R * CFG.fabSway});
   }
-  return VASE_PROFILE[VASE_PROFILE.length - 1][1];
+  // suavizado gaussiano en altura (≈ 1,5 mm)
+  const sz = Math.max(1.5, 1.5 / lh), rad = Math.ceil(sz * 2.5), L = [];
+  for(let i = 0; i < nL; i++){
+    const r = new Float32Array(na); let cx = 0, cy = 0, ws = 0;
+    for(let j = Math.max(0, i - rad); j <= Math.min(nL - 1, i + rad); j++){
+      const w = Math.exp(-((j - i) ** 2) / (2 * sz * sz)); ws += w; cx += w * raw[j].cx; cy += w * raw[j].cy;
+      for(let a = 0; a < na; a++) r[a] += w * raw[j].r[a];
+    }
+    for(let a = 0; a < na; a++) r[a] /= ws;
+    L.push({z: (i + 1) * lh, cx: cx / ws, cy: cy / ws, r});
+  }
+  // voladizo: cada punto puede salirse de la capa anterior como máximo lh · tan(ángulo)
+  const step = lh * Math.tan(clamp(CFG.fabMaxAngle, 10, 75) * Math.PI / 180);
+  for(let i = 1; i < nL; i++){
+    const P = L[i - 1], C = L[i];
+    const dx = C.cx - P.cx, dy = C.cy - P.cy, dc = Math.hypot(dx, dy), mc = step * 0.5;
+    if(dc > mc){ C.cx = P.cx + dx / dc * mc; C.cy = P.cy + dy / dc * mc; }
+    for(let a = 0; a < na; a++){
+      const th = a / na * 2 * Math.PI, proj = (C.cx - P.cx) * Math.cos(th) + (C.cy - P.cy) * Math.sin(th);
+      C.r[a] = Math.max(3, clamp(C.r[a] + proj, P.r[a] - step, P.r[a] + step) - proj);
+    }
+  }
+  return {layers: L, na, segs: segs.length, seconds: T};
 }
-// Un solo jarrón hueco y cerrado (manifold). Las imágenes rodean el cuerpo, una al lado de la otra, de arriba abajo;
-// el desgaste empuja la cara exterior hacia afuera: radio = perfil + relieve × (1 − desgaste). La cara interior es lisa.
-function vaseTriangles(wears){
-  const N = wears.length, H = CFG.fabHeight, R = CFG.fabRadius, wall = CFG.fabWall, bottom = Math.max(wall, 2);
-  const res = Math.max(1, Math.round(CFG.fabRes)), na = clamp(N * GW * res, 96, 900), nz = GH * res;
-  const tris = [];
-  const add = (a, b, c, n) => {   // corrige el orden para que la normal apunte hacia afuera
+const formPoint = (Lr, a, na, scale = 1) => { const th = a / na * 2 * Math.PI, r = Lr.r[a % na] * scale; return [Lr.cx + r * Math.cos(th), Lr.cy + r * Math.sin(th)]; };
+
+// G-code (Marlin, absoluto): fondo macizo en anillos concéntricos y luego una espiral continua de una sola pared.
+function formGcode(form, title){
+  const {layers: L, na} = form, lh = CFG.fabLayer, w = CFG.fabNozzle * 1.1, fil = Math.PI * (CFG.fabFilament / 2) ** 2;
+  let minx = 1e9, maxx = -1e9, miny = 1e9, maxy = -1e9;
+  for(const l of L) for(let a = 0; a < na; a++){ const [x, y] = formPoint(l, a, na); minx = Math.min(minx, x); maxx = Math.max(maxx, x); miny = Math.min(miny, y); maxy = Math.max(maxy, y); }
+  const ox = CFG.fabBedX / 2 - (minx + maxx) / 2, oy = CFG.fabBedY / 2 - (miny + maxy) / 2;
+  if(maxx - minx > CFG.fabBedX - 10 || maxy - miny > CFG.fabBedY - 10) throw new Error(`La figura (${(maxx - minx).toFixed(0)} × ${(maxy - miny).toFixed(0)} mm) no cabe en la cama.`);
+  const out = [], f3 = v => v.toFixed(3), f2 = v => v.toFixed(2);
+  let E = 0, px = null, py = null, pz = 0;
+  const F = mms => Math.round(mms * 60);
+  const travel = (x, y, z) => { out.push(`G0 X${f2(x + ox)} Y${f2(y + oy)}${z != null ? ' Z' + f3(z) : ''} F${F(120)}`); px = x; py = y; if(z != null) pz = z; };
+  const extrude = (x, y, z, h, mms, k = 1) => {
+    E += Math.hypot(x - px, y - py) * w * h / fil * k;
+    out.push(`G1 X${f2(x + ox)} Y${f2(y + oy)}${z != null ? ' Z' + f3(z) : ''} E${E.toFixed(5)} F${F(mms)}`); px = x; py = y; if(z != null) pz = z;
+  };
+  out.push(`; Lo que queda: ${title}`, `; ${L.length} capas de ${lh} mm, ${f2(maxx - minx)} x ${f2(maxy - miny)} x ${f2(L[L.length - 1].z)} mm`,
+    `; boquilla ${CFG.fabNozzle} mm, filamento ${CFG.fabFilament} mm, ${CFG.fabTemp} C / cama ${CFG.fabBedTemp} C. Revisar antes de imprimir.`,
+    'G21', 'G90', 'M82', `M140 S${CFG.fabBedTemp}`, `M104 S${CFG.fabTemp}`, 'G28', `M190 S${CFG.fabBedTemp}`, `M109 S${CFG.fabTemp}`,
+    'G92 E0', 'G1 Z2 F600',
+    '; línea de purga', `G0 X5 Y10 Z0.3 F${F(120)}`, `G1 X5 Y${f2(Math.min(150, CFG.fabBedY - 20))} E12 F${F(20)}`, 'G92 E0', 'G1 Z2 F600');
+  px = 5; py = Math.min(150, CFG.fabBedY - 20);
+  const bottomN = Math.max(3, Math.round(0.8 / lh));
+  // fondo: anillos que van del contorno hacia el centro
+  for(let b = 0; b < bottomN; b++){
+    const l = L[b], z = l.z, sp = b === 0 ? 15 : CFG.fabSpeed * 0.8;
+    out.push(`; fondo, capa ${b + 1}`);
+    if(b === 1) out.push('M106 S255');
+    for(let ring = 0; ; ring++){
+      const off = ring * w; let any = false;
+      const pt = a => { const r = l.r[a % na] - off, th = a / na * 2 * Math.PI; return r >= w * 0.5 ? [l.cx + r * Math.cos(th), l.cy + r * Math.sin(th)] : null; };
+      let started = false;
+      for(let a = 0; a <= na; a++){
+        const q = pt(a);
+        if(!q){ started = false; continue; }
+        any = true;
+        if(!started){ travel(q[0], q[1], z); started = true; } else extrude(q[0], q[1], null, lh, sp, b === 0 ? 1.15 : 1);
+      }
+      if(!any) break;
+    }
+  }
+  // espiral: la Z sube de forma continua a lo largo de cada vuelta
+  out.push('; espiral (modo jarrón)');
+  const s0 = L[bottomN - 1], p0 = formPoint(s0, 0, na); travel(p0[0], p0[1], s0.z);
+  for(let i = bottomN; i < L.length; i++){
+    const l = L[i], prev = L[i - 1];
+    for(let a = 1; a <= na; a++){
+      const f = a / na, q = formPoint(l, a, na), z = prev.z + (l.z - prev.z) * f;
+      extrude(q[0], q[1], z, lh, CFG.fabSpeed);
+    }
+  }
+  out.push('; fin', 'G91', 'G1 E-2 F2400', 'G1 Z10 F600', 'G90', `G0 X${f2(Math.min(CFG.fabBedX - 5, 10))} Y${f2(CFG.fabBedY - 10)} F${F(120)}`,
+    'M106 S0', 'M104 S0', 'M140 S0', 'M84', `; filamento usado: ${(E / 1000).toFixed(2)} m`);
+  return {text: out.join('\n') + '\n', meters: E / 1000};
+}
+// STL de la misma forma (sólido cerrado): para ver la figura en un visor o imprimirla en modo jarrón desde el slicer.
+function formTriangles(form){
+  const {layers: L, na} = form, tris = [], every = Math.max(1, Math.round(0.4 / CFG.fabLayer));
+  const add = (a, b, c, n) => {
     const u = [b[0]-a[0], b[1]-a[1], b[2]-a[2]], v = [c[0]-a[0], c[1]-a[1], c[2]-a[2]];
     const cr = [u[1]*v[2]-u[2]*v[1], u[2]*v[0]-u[0]*v[2], u[0]*v[1]-u[1]*v[0]];
     tris.push(cr[0]*n[0] + cr[1]*n[1] + cr[2]*n[2] >= 0 ? [n, a, b, c] : [n, a, c, b]);
   };
-  const ang = i => 2 * Math.PI * (i % na) / na;
-  const outer = (i, j) => {   // j = 0 en el pie, j = nz en la boca
-    const t = j / nz, phi = (i % na) / na * N, k = Math.min(N - 1, Math.floor(phi));
-    const w = sampleGrid(wears[k], phi - k, 1 - t), r = R * vaseProfile(t) + CFG.fabRelief * (CFG.fabInvert ? w : 1 - w);
-    return [r * Math.cos(ang(i)), r * Math.sin(ang(i)), t * H];
-  };
-  const inner = (i, j) => {   // j = 0 en el fondo interior, j = nz en la boca
-    const z = bottom + (H - bottom) * j / nz, r = R * vaseProfile(z / H) - wall;
-    return [r * Math.cos(ang(i)), r * Math.sin(ang(i)), z];
-  };
-  const O = [], I = [];
-  for(let j = 0; j <= nz; j++){ O.push([]); I.push([]); for(let i = 0; i < na; i++){ O[j].push(outer(i, j)); I[j].push(inner(i, j)); } }
-  for(let i = 0; i < na; i++){
-    const i1 = (i + 1) % na, a = ang(i + 0.5), out = [Math.cos(a), Math.sin(a), 0], inn = [-out[0], -out[1], 0];
-    for(let j = 0; j < nz; j++){
-      add(O[j][i], O[j][i1], O[j + 1][i1], out); add(O[j][i], O[j + 1][i1], O[j + 1][i], out);
-      add(I[j][i], I[j][i1], I[j + 1][i1], inn); add(I[j][i], I[j + 1][i1], I[j + 1][i], inn);
-    }
-    add(O[nz][i], O[nz][i1], I[nz][i1], [0, 0, 1]); add(O[nz][i], I[nz][i1], I[nz][i], [0, 0, 1]);   // borde de la boca
-    add([0, 0, 0], O[0][i], O[0][i1], [0, 0, -1]);                                                   // pie
-    add([0, 0, bottom], I[0][i], I[0][i1], [0, 0, 1]);                                               // fondo interior
+  const rings = [{l: L[0], z: 0}];
+  for(let i = 0; i < L.length; i += every) rings.push({l: L[i], z: L[i].z});
+  if(rings[rings.length - 1].l !== L[L.length - 1]) rings.push({l: L[L.length - 1], z: L[L.length - 1].z});
+  const V = rings.map(({l, z}) => [...Array(na)].map((_, a) => { const [x, y] = formPoint(l, a, na); return [x, y, z]; }));
+  for(let j = 0; j < V.length - 1; j++) for(let a = 0; a < na; a++){
+    const a1 = (a + 1) % na, th = (a + 0.5) / na * 2 * Math.PI, n = [Math.cos(th), Math.sin(th), 0];
+    add(V[j][a], V[j][a1], V[j + 1][a1], n); add(V[j][a], V[j + 1][a1], V[j + 1][a], n);
+  }
+  const b = rings[0].l, t = rings[rings.length - 1].l, top = V.length - 1;
+  for(let a = 0; a < na; a++){
+    const a1 = (a + 1) % na;
+    add([b.cx, b.cy, 0], V[0][a], V[0][a1], [0, 0, -1]);
+    add([t.cx, t.cy, rings[top].z], V[top][a], V[top][a1], [0, 0, 1]);
   }
   return tris;
+}
+// vista previa isométrica: una línea por cada pocas capas
+function drawForm(canvas, form){
+  const g = canvas.getContext('2d'), W = canvas.width, H = canvas.height, {layers: L, na} = form;
+  const iso = (x, y, z) => [(x - y) * 0.866, (x + y) * 0.5 - z];
+  let mnx = 1e9, mxx = -1e9, mny = 1e9, mxy = -1e9;
+  for(const l of L) for(let a = 0; a < na; a += 6){ const [x, y] = formPoint(l, a, na), [u, v] = iso(x, y, l.z); mnx = Math.min(mnx, u); mxx = Math.max(mxx, u); mny = Math.min(mny, v); mxy = Math.max(mxy, v); }
+  const sc = 0.86 * Math.min(W / (mxx - mnx), H / (mxy - mny)), ox = W / 2 - sc * (mnx + mxx) / 2, oy = H / 2 - sc * (mny + mxy) / 2;
+  g.fillStyle = '#060606'; g.fillRect(0, 0, W, H); g.lineWidth = 1;
+  const every = Math.max(1, Math.round(L.length / 90));
+  for(let i = 0; i < L.length; i += every){
+    const l = L[i]; g.strokeStyle = `rgba(193,255,114,${0.25 + 0.6 * i / L.length})`; g.beginPath();
+    for(let a = 0; a <= na; a++){ const [x, y] = formPoint(l, a, na), [u, v] = iso(x, y, l.z); a ? g.lineTo(ox + sc * u, oy + sc * v) : g.moveTo(ox + sc * u, oy + sc * v); }
+    g.stroke();
+  }
 }
 function trianglesToSTL(tris, name){
   const buf = new ArrayBuffer(84 + tris.length * 50), dv = new DataView(buf);
@@ -1301,33 +1438,39 @@ function trianglesToSTL(tris, name){
   return buf;
 }
 const fileSafe = id => String(id).replace(/\.[a-z0-9]+$/i, '').replace(/[^a-z0-9_-]+/gi, '_');
+function fabSessions(){ return lastS && !STORE.sessions.some(x => x.id === lastS.id) ? [...STORE.sessions, summary(lastS)] : STORE.sessions; }
 function fillFabSelect(){
-  const sel = $('#fab-img'), prev = sel.value;
-  sel.innerHTML = corpus.map(c => `<option value="${c.id}">${c.id} · ${(meanOf(gridsFor(c.id).wear) * 100).toFixed(1)} % gastada</option>`).join('');
-  if(corpus.some(c => c.id === prev)) sel.value = prev;
+  const sel = $('#fab-sesion'), prev = sel.value, list = fabSessions();
+  sel.innerHTML = list.map(x => `<option value="${x.id}">Visita ${x.visitante} · ${x.items.length} imágenes${x.items.some(i => i.trayectoria && i.trayectoria.length) ? '' : ' · sin trayectoria'}</option>`).reverse().join('');
+  if(list.some(x => x.id === prev)) sel.value = prev;
 }
-[['#fab-height', 'fabHeight'], ['#fab-radius', 'fabRadius'], ['#fab-wall', 'fabWall'], ['#fab-relief', 'fabRelief'], ['#fab-res', 'fabRes']].forEach(([sel, key]) => {
+function fabSession(){ const id = $('#fab-sesion').value; return fabSessions().find(x => x.id === id); }
+[['#fab-drama', 'fabDrama'], ['#fab-sway', 'fabSway'], ['#fab-height', 'fabHeight'], ['#fab-radius', 'fabRadius'], ['#fab-maxangle', 'fabMaxAngle'],
+ ['#fab-layer', 'fabLayer'], ['#fab-nozzle', 'fabNozzle'], ['#fab-filament', 'fabFilament'], ['#fab-temp', 'fabTemp'], ['#fab-bedtemp', 'fabBedTemp'],
+ ['#fab-speed', 'fabSpeed'], ['#fab-bedx', 'fabBedX'], ['#fab-bedy', 'fabBedY']].forEach(([sel, key]) => {
   const inp = $(sel); inp.value = CFG[key];
-  inp.addEventListener('change', () => { const v = parseFloat(inp.value); if(!isNaN(v) && v > 0){ CFG[key] = v; saveCfg(); } });
+  inp.addEventListener('change', () => { const v = parseFloat(inp.value); if(!isNaN(v) && v >= 0){ CFG[key] = v; saveCfg(); } });
 });
-$('#fab-invert').checked = CFG.fabInvert;
-$('#fab-invert').addEventListener('change', e => { CFG.fabInvert = e.target.checked; saveCfg(); });
-$('#fab-img').addEventListener('focus', fillFabSelect);
+$('#fab-sesion').addEventListener('focus', fillFabSelect);
 document.querySelector('[data-target="p-fab"]').addEventListener('click', fillFabSelect);
-function exportVase(ids, name, file){
-  const tris = vaseTriangles(ids.map(id => gridsFor(id).wear));
-  download(file, trianglesToSTL(tris, name), 'model/stl');
-  log(`Jarrón STL exportado: ${ids.length} ${ids.length === 1 ? 'imagen' : 'imágenes'} alrededor, ${CFG.fabHeight} mm de alto (${tris.length} triángulos).`);
+function exportForm(sess, kind){
+  try{
+    const form = formLayers(sess), name = 'visita ' + sess.visitante;
+    if(kind === 'gcode'){
+      const g = formGcode(form, name);
+      download(`lo-que-queda-figura-${sess.visitante}.gcode`, g.text, 'text/x-gcode');
+      log(`G-code exportado: visita ${sess.visitante}, ${form.layers.length} capas, ${g.meters.toFixed(1)} m de filamento.`);
+    } else {
+      const tris = formTriangles(form);
+      download(`lo-que-queda-figura-${sess.visitante}.stl`, trianglesToSTL(tris, name), 'model/stl');
+      log(`STL exportado: visita ${sess.visitante} (${tris.length} triángulos).`);
+    }
+  }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); }
 }
-$('#btn-stl').addEventListener('click', () => {
-  if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
-  const id = $('#fab-img').value || corpus[0].id;
-  exportVase([id], id, `lo-que-queda-jarron-${fileSafe(id)}.stl`);
-});
-$('#btn-stl-todas').addEventListener('click', () => {
-  if(!corpus.length){ log('No hay imágenes cargadas.', 'aviso'); return; }
-  exportVase(corpus.map(c => c.id), 'corpus', 'lo-que-queda-jarron-corpus.stl');
-});
+const fabNeedSession = () => { const x = fabSession(); if(!x) log('No hay visitas registradas todavía.', 'aviso'); return x; };
+$('#btn-fab-preview').addEventListener('click', () => { const x = fabNeedSession(); if(!x) return; try{ drawForm($('#fab-preview'), formLayers(x)); }catch(e){ log('No se pudo generar la figura: ' + e.message, 'aviso'); } });
+$('#btn-gcode').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'gcode'); });
+$('#btn-stl').addEventListener('click', () => { const x = fabNeedSession(); if(x) exportForm(x, 'stl'); });
 
 /* ---------- ventana 03 · Señal y lectura en vivo ---------- */
 const gs = $('#grafico-senal'), gsx = gs.getContext('2d');
