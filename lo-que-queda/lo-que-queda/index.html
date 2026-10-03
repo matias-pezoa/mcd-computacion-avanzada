@@ -500,7 +500,7 @@ const GW = 27, GH = 48, RW = 540, RH = 960, CELL = 20;   // grilla de desgaste: 
 const DEFAULT_CFG = {
   calibSec: 20, feedLength: 30, missWindow: 8, latMin: 0.8, latMax: 3.5, minAmp: 0.04, kNoise: 3,
   stepsPerImage: 2, mode: 'manual', autoMs: 3000, invert: false,
-  wearRate: 0.2,        // desgaste por segundo de mirada en el centro de la mancha
+  wearRate: 0.1,        // desgaste por segundo de mirada en el centro de la mancha
   extraFactor: 2,       // desgaste adicional, en múltiplos, si la imagen no provocó respuesta
   gazeRadius: 0.09,     // radio de la mancha de mirada, como fracción del ancho de la imagen
   clicksPerPoint: 5,
@@ -509,7 +509,7 @@ const DEFAULT_CFG = {
   gazeSource: 'camara', showGaze: false, showLiveHeat: false, showCamera: false, showReadout: true, kalman: true
 };
 let CFG = Object.assign({}, DEFAULT_CFG, load('lqq2_cfg', {}));
-if(CFG.wearRate === 0.08 || CFG.wearRate === 0.25) CFG.wearRate = DEFAULT_CFG.wearRate;   // configuraciones guardadas con velocidades anteriores
+if([0.08, 0.25, 0.2].includes(CFG.wearRate)) CFG.wearRate = DEFAULT_CFG.wearRate;   // configuraciones guardadas con velocidades anteriores
 function saveCfg(){ save('lqq2_cfg', CFG); }
 let STORE = Object.assign({visitors: 0, sessions: [], img: {}}, load('lqq2_store', {}));
 const GRIDS = {};
@@ -681,7 +681,7 @@ function flow(px, py, seed, t){
 // nivel 0 → original · 0,05–0,4 → licuado (la imagen se derrite y se estira) · 0–0,55 → pixelado (bloques de hasta 27 px)
 // · 0,25–0,85 → datamosh (bloques arrastrados en la dirección de la mirada, con restos del cuadro anterior) · 0,3–0,6 → manchones · 0,8–1 → blanco
 function compose(item, wear, ctx, moshPrev){
-  const L = layersFor(item), n = BLOCKS.length, t = performance.now() / 1000, seed = (String(item.id).length * 7.13 + String(item.id).charCodeAt(0)) % 10;
+  const L = layersFor(item), n = BLOCKS.length, t = performance.now() / 1000 * 0.35, seed = (String(item.id).length * 7.13 + String(item.id).charCodeAt(0)) % 10;
   ctx.globalAlpha = 1; ctx.imageSmoothingEnabled = false; ctx.drawImage(L.color[0], 0, 0);
   const SL = 4, sh = CELL / SL;
   for(let cy = 0; cy < GH; cy++) for(let cx = 0; cx < GW; cx++){
@@ -702,7 +702,7 @@ function compose(item, wear, ctx, moshPrev){
     //   · bloques que saltan en la dirección en que se mueve la mirada, copiados del cuadro anterior
     //   · bloques "sangrados": una sola fila de píxeles estirada hacia abajo
     const dm = smooth(0.2, 0.55, l) * (1 - smooth(0.85, 0.97, l));
-    const bx = cx >> 1, by = cy >> 1, hb = hash(bx, by), tick = Math.floor(t * 2);
+    const bx = cx >> 1, by = cy >> 1, hb = hash(bx, by), tick = Math.floor(t / 2);
     if(dm > 0 && hb < 0.25 + 0.7 * dm){
       const mx = (MV.x * 2.5 + (hash(by, bx + tick) - 0.5) * 120 * dm), my = (MV.y * 2.5 + (hash(bx + 9, by + tick) - 0.5) * 40 * dm);
       ctx.globalAlpha = Math.min(1, 0.35 + dm);
