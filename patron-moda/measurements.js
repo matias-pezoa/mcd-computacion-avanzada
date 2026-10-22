@@ -37,7 +37,6 @@ export const MEASUREMENT_GROUPS = [
     label: "Tabla de patronaje (ajuste fino)",
     open: false,
     fields: [
-      { key: "frontArmholeDrop", label: "Bajada de sisa delantera", unit: "cm", default: 20, min: 14, max: 26, step: 0.5 },
       { key: "backArmholeDrop", label: "Bajada de sisa espalda", unit: "cm", default: 19, min: 14, max: 26, step: 0.5 },
       { key: "bustHeight", label: "Altura de busto", unit: "cm", default: 25, min: 18, max: 34, step: 0.5 },
       { key: "hipHeight", label: "Altura de cadera", unit: "cm", default: 20, min: 14, max: 28, step: 0.5 },

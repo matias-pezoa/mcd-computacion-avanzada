@@ -121,9 +121,14 @@ function update() {
   canvas.innerHTML = renderBodiceSvg(pieces, { scale: SCALE });
   const spanCm = Math.max(pieces.front.bounds.width, 20);
   rulerWrap.innerHTML = renderRuler(Math.ceil(spanCm / 5) * 5, SCALE);
-  modeCaption.textContent = mirrorToggle.checked
+  const view = mirrorToggle.checked
     ? "Vista: pieza completa (delantero + espalda espejados sobre el doblez)."
     : "Vista: mitad de pieza — la línea de doblez (punteada) va sobre el centro delantero/espalda.";
+  const { front, back } = pieces;
+  const side = front.sideMatched
+    ? `Costado: delantero ${front.sideLength.toFixed(1)} cm = espalda ${back.sideLength.toFixed(1)} cm (pinza de busto cerrada).`
+    : `Costado sin igualar: delantero ${front.sideLength.toFixed(1)} cm / espalda ${back.sideLength.toFixed(1)} cm — revisa pinza de busto o largos de talle.`;
+  modeCaption.textContent = `${view} ${side}`;
 }
 
 buildForm();

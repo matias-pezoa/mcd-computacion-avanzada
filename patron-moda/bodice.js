@@ -128,18 +128,16 @@ function clampDartAxis(x0, width, waistY, topY, bottomY, sideSegs) {
  * @param {object} m medidas
  * @param {"front"|"back"} side
  */
-function buildPiece(m, side) {
+function buildPiece(m, side, backSideLength) {
   const isFront = side === "front";
   const waistLength = isFront ? m.frontWaistLength : m.backWaistLength;
-  const armholeDrop = isFront ? m.frontArmholeDrop : m.backArmholeDrop;
   const halfWidth = isFront ? m.chestWidth / 2 : m.backWidth / 2;
   const dartWidth = isFront ? m.frontWaistDartWidth : m.backWaistDartWidth;
   const dartDown = isFront ? m.frontWaistDartLength : m.backWaistDartLength;
 
-  // Pasos 1-2: rectángulo base (alto = largo de talle, ancho = busto/4) y caja de sisa.
+  // Paso 1: rectángulo base (alto = largo de talle, ancho = busto/4).
   const A = P(0, 0);
   const boxTopCorner = P(m.bust / 4, 0);
-  const boxBottomCorner = P(halfWidth, armholeDrop);
 
   // Paso 3: cuello.
   const A1 = P(m.neck / 6 + m.neckHorizontalConst, 0);
@@ -149,7 +147,6 @@ function buildPiece(m, side) {
   // Paso 4: hombro.
   const S = shoulderPoint(A1, boxTopCorner, m.shoulderDrop, m.shoulderLength);
 
-  const U = P(m.bust / 4, armholeDrop);
   // La pinza consume `dartWidth` en la cintura: el panel se traza a
   // cintura/4 + ancho de pinza para que, cosida la pinza, quede cintura/4.
   const W = P(m.waist / 4 + dartWidth, waistLength);
@@ -157,16 +154,42 @@ function buildPiece(m, side) {
   const H = P(m.hip / 4, waistLength + m.hipHeight);
   const Hc = P(0, waistLength + m.hipHeight);
 
+  // Pinza de busto (pasos 6-7): muesca sobre el costado, centrada en la altura de busto.
+  const L1 = P(m.bust / 4, m.bustHeight - m.bustDartDepth / 2);
+  const L2 = P(m.bust / 4, m.bustHeight + m.bustDartDepth / 2);
+
+  // Bajo sisa (U). Espalda: bajada de sisa de la tabla. Delantero: se ubica
+  // para que el costado, con la pinza de busto cerrada (W->L2 + L1->U), mida
+  // lo mismo que el costado de la espalda; así ambos costados se cosen parejos
+  // con cualquier profundidad de pinza. Se limita para no cruzar la pinza ni
+  // subir a la zona del hombro (en ese caso el costado no logra igualarse).
+  let U;
+  let sideMatched = true;
+  if (isFront) {
+    const lowerLeg = Math.hypot(L2.x - W.x, L2.y - W.y);
+    const wantedY = L1.y - (backSideLength - lowerLeg);
+    const minY = S.y + 6;
+    const maxY = L1.y - 0.5;
+    const y = Math.min(maxY, Math.max(minY, wantedY));
+    sideMatched = Math.abs(y - wantedY) < 1e-6;
+    U = P(m.bust / 4, y);
+  } else {
+    U = P(m.bust / 4, m.backArmholeDrop);
+  }
+  const sideLength = isFront
+    ? Math.hypot(L2.x - W.x, L2.y - W.y) + (L1.y - U.y)
+    : Math.hypot(U.x - W.x, U.y - W.y);
+
+  // Paso 2: caja de sisa, a la altura del bajo sisa.
+  const boxBottomCorner = P(halfWidth, U.y);
+
   const outline = [];
   const darts = [];
   const guides = [{ points: [D, W] }];
   const points = { A, boxTopCorner, boxBottomCorner, A1, A2, S, U, W, D, H, Hc };
 
   if (isFront) {
-    // Pasos 6-7: ápice de busto y pinza lateral (muesca sobre el costado).
     const apex = P(m.bustSeparation / 2, m.bustHeight);
-    const L1 = P(m.bust / 4, m.bustHeight - m.bustDartDepth / 2);
-    const L2 = P(m.bust / 4, m.bustHeight + m.bustDartDepth / 2);
     // Paso 9: despegar la pinza del ápice real hacia el costado.
     const dartDir = normalize(sub(P(L1.x, apex.y), apex));
     const dartTip = add(apex, scale(dartDir, m.dartRelease));
@@ -217,15 +240,17 @@ function buildPiece(m, side) {
     darts,
     guides,
     points,
+    sideLength,
+    sideMatched,
     bounds: bounds(outline),
   };
 }
 
 export function buildBodice(measurements) {
-  return {
-    front: buildPiece(measurements, "front"),
-    back: buildPiece(measurements, "back"),
-  };
+  // La espalda va primero: su costado fija el largo del costado delantero.
+  const back = buildPiece(measurements, "back");
+  const front = buildPiece(measurements, "front", back.sideLength);
+  return { front, back };
 }
 
 function mirrorXPoint(p) {

@@ -71,5 +71,8 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   que uses para confirmar escala y capas.
 - Los valores por defecto son una talla de referencia (aprox. M), no una
   medición verificada. El patrón no se ha validado contra un cuerpo real.
-- Lados no balanceados: el largo del costado delantero y el de la espalda no se
-  igualan automáticamente.
+- Costados balanceados: el bajo sisa delantero no es una medida de entrada; se
+  calcula para que el costado delantero, con la pinza de busto cerrada, mida lo
+  mismo que el de la espalda (al cambiar la profundidad de la pinza, el bajo
+  sisa delantero sube o baja). Si las medidas lo impiden (busto muy alto, talle
+  delantero muy corto), la leyenda bajo el trazado lo indica.
