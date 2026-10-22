@@ -30,7 +30,7 @@ function flattenSegment(seg) {
   return pts;
 }
 
-function flattenChain(segments) {
+export function flattenChain(segments) {
   if (!segments.length) return [];
   const pts = [segments[0].p0];
   for (const seg of segments) pts.push(...flattenSegment(seg));

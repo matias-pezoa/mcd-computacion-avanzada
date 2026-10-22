@@ -151,6 +151,21 @@ button{
 button:hover{background:var(--black);color:var(--white)}
 button.secondary{background:transparent;color:var(--white);border-color:var(--line-soft)}
 button.secondary:hover{background:var(--white);color:var(--black)}
+/* menú desplegable de exportación: el resumen se ve como el botón principal */
+.export-menu{position:relative}
+.export-menu summary{list-style:none;display:flex;justify-content:center;align-items:center;gap:10px;border:1px solid var(--white);background:var(--white);color:var(--black);
+  padding:11px 12px;font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:background-color .15s linear,color .15s linear}
+.export-menu summary::-webkit-details-marker{display:none}
+.export-menu summary::after{content:"\25BE";font-size:10px}
+.export-menu[open] summary::after{content:"\25B4"}
+.export-menu summary:hover,.export-menu[open] summary{background:var(--black);color:var(--white)}
+.export-options{border:1px solid var(--line-soft);border-top:none}
+.export-options button{display:flex;justify-content:space-between;align-items:baseline;background:transparent;color:var(--white);border:none;border-bottom:1px solid var(--line-faint);text-align:left}
+.export-options button:last-child{border-bottom:none}
+.export-options button:hover{background:var(--white);color:var(--black)}
+.export-options .fmt-note{font-size:9px;font-weight:400;letter-spacing:.06em;color:var(--gray-2)}
+.export-options button:hover .fmt-note{color:var(--gray-3)}
+
 .status-line{min-height:1.4em;margin:0;font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--gray-1)}
 
 .archive-footer{margin-top:28px;padding-top:16px;border-top:1px solid var(--line-soft);display:flex;flex-direction:column;gap:4px;

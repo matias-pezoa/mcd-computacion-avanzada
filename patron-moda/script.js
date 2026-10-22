@@ -2,6 +2,7 @@ import { MEASUREMENT_GROUPS, defaultMeasurements } from "./measurements.js";
 import { buildBodice, mirrorToFullPiece } from "./bodice.js";
 import { renderBodiceSvg, renderRuler } from "./render.js";
 import { buildDxf, downloadDxf } from "./dxf.js";
+import { buildSheet, sheetToSvg, sheetToPdf } from "./sheet.js";
 
 // v2: la pinza de espalda pasó a 3 cm y centrada; se descartan medidas guardadas antes.
 const STORAGE_KEY = "patron-moda:measurements:v2";
@@ -12,7 +13,7 @@ const canvas = document.getElementById("pattern-canvas");
 const rulerWrap = document.getElementById("ruler-wrap");
 const mirrorToggle = document.getElementById("mirror-toggle");
 const resetBtn = document.getElementById("reset-btn");
-const exportBtn = document.getElementById("export-btn");
+const exportMenu = document.getElementById("export-menu");
 const statusLine = document.getElementById("status-line");
 const modeCaption = document.getElementById("mode-caption");
 
@@ -176,10 +177,131 @@ resetBtn.addEventListener("click", () => {
   buildForm();
   update();
 });
-exportBtn.addEventListener("click", () => {
+// ---------- exportar (menú desplegable: DXF / PDF / PNG) ----------
+const PNG_PX_PER_CM = 40; // ~102 dpi
+const JSPDF_URL = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+let jsPdfPromise = null;
+
+function loadJsPdf() {
+  if (window.jspdf?.jsPDF) return Promise.resolve(window.jspdf.jsPDF);
+  jsPdfPromise ??= new Promise((resolve, reject) => {
+    const s = document.createElement("script");
+    s.src = JSPDF_URL;
+    s.onload = () => resolve(window.jspdf.jsPDF);
+    s.onerror = () => {
+      jsPdfPromise = null;
+      reject(new Error("no se pudo cargar jsPDF"));
+    };
+    document.head.appendChild(s);
+  });
+  return jsPdfPromise;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function currentSheet() {
+  const pieces = currentPieces();
+  const m = measurements;
+  const subtitle = `Busto ${m.bust} - Cintura ${m.waist} - Cadera ${m.hip} - Talle del. ${m.frontWaistLength} / esp. ${m.backWaistLength} cm` +
+    (mirrorToggle.checked ? " - pieza completa" : " - mitad (doblar en el centro)");
+  return buildSheet(pieces, { title: "CUERPO BASE", subtitle });
+}
+
+// CRC-32 para el chunk pHYs del PNG.
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (const b of bytes) c = CRC_TABLE[(c ^ b) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// Inserta la resolución (px por metro) tras el IHDR, para que el PNG se
+// imprima a escala real en programas que respetan los dpi del archivo.
+async function withPngResolution(blob, pxPerCm) {
+  const src = new Uint8Array(await blob.arrayBuffer());
+  const ppm = Math.round(pxPerCm * 100);
+  const chunk = new Uint8Array(21);
+  const view = new DataView(chunk.buffer);
+  view.setUint32(0, 9);
+  chunk.set([0x70, 0x48, 0x59, 0x73], 4); // "pHYs"
+  view.setUint32(8, ppm);
+  view.setUint32(12, ppm);
+  chunk[16] = 1; // unidad: metro
+  view.setUint32(17, crc32(chunk.subarray(4, 17)));
+  const ihdrEnd = 8 + 25; // firma (8) + IHDR (4 largo + 4 tipo + 13 datos + 4 crc)
+  const out = new Uint8Array(src.length + chunk.length);
+  out.set(src.subarray(0, ihdrEnd), 0);
+  out.set(chunk, ihdrEnd);
+  out.set(src.subarray(ihdrEnd), ihdrEnd + chunk.length);
+  return new Blob([out], { type: "image/png" });
+}
+
+async function exportPng() {
+  const svg = sheetToSvg(currentSheet(), PNG_PX_PER_CM);
+  const img = new Image();
+  const url = URL.createObjectURL(new Blob([svg], { type: "image/svg+xml" }));
+  try {
+    await new Promise((resolve, reject) => {
+      img.onload = resolve;
+      img.onerror = () => reject(new Error("no se pudo dibujar la lámina"));
+      img.src = url;
+    });
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext("2d").drawImage(img, 0, 0);
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+    downloadBlob(await withPngResolution(blob, PNG_PX_PER_CM), "patron-cuerpo-base.png");
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+async function exportPdf() {
+  const jsPDF = await loadJsPdf();
+  sheetToPdf(currentSheet(), jsPDF).save("patron-cuerpo-base.pdf");
+}
+
+function exportDxf() {
   const pieces = currentPieces();
   downloadDxf(buildDxf([pieces.front, pieces.back]), "patron-cuerpo-base.dxf");
-  statusLine.textContent = "DXF generado.";
+}
+
+const EXPORTERS = {
+  dxf: [exportDxf, "DXF generado."],
+  pdf: [exportPdf, "PDF generado (escala 1:1)."],
+  png: [exportPng, `PNG generado (escala 1:1, ${Math.round(PNG_PX_PER_CM * 2.54)} dpi).`],
+};
+
+exportMenu.addEventListener("click", async (e) => {
+  const btn = e.target.closest("[data-format]");
+  if (!btn) return;
+  exportMenu.open = false;
+  const [run, done] = EXPORTERS[btn.dataset.format];
+  statusLine.textContent = "Generando…";
+  try {
+    await run();
+    statusLine.textContent = done;
+  } catch (err) {
+    statusLine.textContent = `Error al exportar: ${err.message}`;
+  }
+});
+// Cerrar el menú al hacer clic fuera de él.
+document.addEventListener("click", (e) => {
+  if (exportMenu.open && !exportMenu.contains(e.target)) exportMenu.open = false;
 });
 
 update();

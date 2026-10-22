@@ -21,9 +21,15 @@ npx serve patron-moda
   colapsada). El patrón se redibuja en vivo; las medidas quedan guardadas en
   `localStorage`.
 - "Pieza completa" espeja la mitad trazada sobre el doblez (útil para cortar).
-- "Exportar DXF" descarga `patron-cuerpo-base.dxf` (mitad o pieza completa,
-  según el toggle). Capas: `CORTE`, `PINZAS`, `GUIAS` (doblez y línea de
-  cintura), `ETIQUETAS`. 1 unidad = 1 cm.
+- Menú desplegable "Exportar" (mitad o pieza completa, según el toggle):
+  - **PDF** — vectorial, una sola página del tamaño de la lámina a escala 1:1,
+    con título, medidas usadas, leyenda y un cuadrado de control de 10 cm.
+    Usa jsPDF (cdnjs), que se carga solo al exportar.
+  - **PNG** — la misma lámina rasterizada a 40 px/cm (~102 dpi), con la
+    resolución escrita en el archivo (chunk `pHYs`) para imprimir a 1:1.
+  - **DXF** — `patron-cuerpo-base.dxf`. Capas: `CORTE`, `PINZAS`, `GUIAS`
+    (doblez y línea de cintura), `ETIQUETAS`. 1 unidad = 1 cm.
+  En los tres formatos las piezas quedan alineadas por la línea de cintura.
 
 ## Estructura
 
@@ -31,6 +37,7 @@ npx serve patron-moda
 - `bodice.js` — motor geométrico: medidas -> puntos/curvas de delantero y espalda.
 - `render.js` — SVG de las piezas y regla en cm.
 - `dxf.js` — exportador DXF (AC1015).
+- `sheet.js` — lámina de impresión 1:1 y su salida a SVG (para el PNG) y PDF.
 - `script.js`, `index.html`, `style.css` — interfaz.
 
 ## Del artículo al código
