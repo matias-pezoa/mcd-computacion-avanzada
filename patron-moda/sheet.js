@@ -6,7 +6,7 @@
 //   { kind: "text", x, y, text, size, weight }  size en cm
 // El eje y crece hacia abajo, como en el resto del sistema.
 
-import { flattenChain } from "./dxf.js?v=3";
+import { flattenChain } from "./dxf.js?v=4";
 
 export const SHEET_STYLES = {
   cut: { width: 0.05, dash: null, color: "#060606" },

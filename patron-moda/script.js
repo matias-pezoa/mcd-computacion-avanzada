@@ -1,14 +1,14 @@
 // Las URLs de los módulos llevan ?v=N para no mezclar archivos viejos del caché
 // (GitHub Pages cachea 10 min). Subir N en todos los imports al cambiar un módulo.
-import { MEASUREMENT_GROUPS, defaultMeasurements } from "./measurements.js?v=3";
-import { buildBodice, mirrorToFullPiece } from "./bodice.js?v=3";
-import { renderBodiceSvg, renderRuler } from "./render.js?v=3";
-import { buildDxf, downloadDxf } from "./dxf.js?v=3";
-import { buildSheet, sheetToSvg, sheetToPdf } from "./sheet.js?v=3";
+import { MEASUREMENT_GROUPS, defaultMeasurements } from "./measurements.js?v=4";
+import { buildBodice, mirrorToFullPiece } from "./bodice.js?v=4";
+import { renderBodiceSvg, renderRuler, fitScale } from "./render.js?v=4";
+import { buildDxf, downloadDxf } from "./dxf.js?v=4";
+import { buildSheet, sheetToSvg, sheetToPdf } from "./sheet.js?v=4";
 
 // v2: la pinza de espalda pasó a 3 cm y centrada; se descartan medidas guardadas antes.
 const STORAGE_KEY = "patron-moda:measurements:v2";
-const SCALE = 6; // px por cm
+
 
 const form = document.getElementById("measurement-form");
 const canvas = document.getElementById("pattern-canvas");
@@ -18,6 +18,8 @@ const resetBtn = document.getElementById("reset-btn");
 const exportMenu = document.getElementById("export-menu");
 const statusLine = document.getElementById("status-line");
 const modeCaption = document.getElementById("mode-caption");
+const mat = document.getElementById("cutting-mat");
+const scaleReadout = document.getElementById("scale-readout");
 
 let measurements = loadMeasurements();
 
@@ -153,11 +155,28 @@ function currentPieces() {
   return { front, back };
 }
 
+// La cuadrícula de la mesa marca 5 cm a la escala actual y se alinea con el
+// doblez del delantero y la línea de cintura.
+const GRID_CM = 5;
+
 function update() {
   const pieces = currentPieces();
-  canvas.innerHTML = renderBodiceSvg(pieces, { scale: SCALE });
-  const spanCm = Math.max(pieces.front.bounds.width, 20);
-  rulerWrap.innerHTML = renderRuler(Math.ceil(spanCm / 5) * 5, SCALE);
+  // El molde llena la mesa: la escala se calcula con el espacio disponible.
+  // Se reservan ~56 px de alto para la lectura de escala (arriba) y la regla (abajo).
+  const scale = fitScale(pieces, mat.clientWidth, mat.clientHeight - 56);
+  canvas.innerHTML = renderBodiceSvg(pieces, { scale });
+
+  const svg = canvas.querySelector("svg");
+  const matRect = mat.getBoundingClientRect();
+  const svgRect = svg.getBoundingClientRect();
+  const originX = svgRect.left - matRect.left - mat.clientLeft + Number(svg.dataset.originX);
+  const waistY = svgRect.top - matRect.top - mat.clientTop + Number(svg.dataset.waistY);
+  const grid = GRID_CM * scale;
+  mat.style.backgroundSize = `${grid}px ${grid}px`;
+  mat.style.backgroundPosition = `${originX % grid}px ${waistY % grid}px`;
+
+  rulerWrap.innerHTML = renderRuler(20, scale);
+  scaleReadout.textContent = `Pantalla: ${scale.toFixed(1)} px/cm · cuadrícula ${GRID_CM} cm`;
   const view = mirrorToggle.checked
     ? "Vista: pieza completa (delantero + espalda espejados sobre el doblez)."
     : "Vista: mitad de pieza — la línea de doblez (punteada) va sobre el centro delantero/espalda.";
@@ -307,3 +326,10 @@ document.addEventListener("click", (e) => {
 });
 
 update();
+
+// Al cambiar el tamaño de la mesa (ventana, panel), se recalcula la escala.
+let resizeFrame = 0;
+new ResizeObserver(() => {
+  cancelAnimationFrame(resizeFrame);
+  resizeFrame = requestAnimationFrame(update);
+}).observe(mat);

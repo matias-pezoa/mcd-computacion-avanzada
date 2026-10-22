@@ -35,7 +35,8 @@ npx serve patron-moda
 
 - `measurements.js` — catálogo de medidas (clave, etiqueta, rango, defecto).
 - `bodice.js` — motor geométrico: medidas -> puntos/curvas de delantero y espalda.
-- `render.js` — SVG de las piezas y regla en cm.
+- `render.js` — SVG de las piezas, regla en cm y `fitScale` (escala de pantalla
+  que hace que el molde llene la mesa; se recalcula al cambiar el tamaño).
 - `dxf.js` — exportador DXF (AC1015).
 - `sheet.js` — lámina de impresión 1:1 y su salida a SVG (para el PNG) y PDF.
 - `script.js`, `index.html`, `style.css` — interfaz.
