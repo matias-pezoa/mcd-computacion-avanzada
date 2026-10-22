@@ -33,6 +33,18 @@ export const MEASUREMENT_GROUPS = [
     ],
   },
   {
+    id: "pinza-busto",
+    label: "Pinza de busto",
+    open: true,
+    fields: [
+      // Por defecto la pinza de busto = talle delantero − talle espalda. Si los
+      // talles son iguales por otra razón (p. ej. espalda curva / cifosis) pero
+      // hay busto, se activa una pinza manual que reemplaza ese cálculo.
+      { key: "bustDartManual", type: "toggle", label: "Pinza de busto manual (no derivar de los talles)", default: false },
+      { key: "bustDartManualDepth", label: "Profundidad pinza de busto", unit: "cm", default: 2, min: 0.5, max: 6, step: 0.1, showIf: "bustDartManual" },
+    ],
+  },
+  {
     id: "tabla",
     label: "Tabla de patronaje (ajuste fino)",
     open: false,

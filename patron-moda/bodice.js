@@ -158,7 +158,11 @@ function buildPiece(m, side, backSideLength) {
   // Su ancho (abertura sobre el costado) es la diferencia entre talle
   // delantero y talle espalda: es el largo extra que el delantero necesita
   // para cubrir el busto. Si el delantero no es más largo, no hay pinza.
-  const bustDartDepth = Math.max(0, m.frontWaistLength - m.backWaistLength);
+  // Con `bustDartManual` la profundidad se fija a mano (talles iguales por
+  // espalda curva, no por falta de busto).
+  const bustDartDepth = m.bustDartManual
+    ? m.bustDartManualDepth
+    : Math.max(0, m.frontWaistLength - m.backWaistLength);
   const hasBustDart = bustDartDepth >= 0.1;
   const L1 = P(m.bust / 4, m.bustHeight - bustDartDepth / 2);
   const L2 = P(m.bust / 4, m.bustHeight + bustDartDepth / 2);

@@ -59,11 +59,39 @@ function buildForm() {
     section.appendChild(details);
     form.appendChild(section);
   }
+  refreshConditionalRows();
+}
+
+// Filas con `showIf`: solo visibles mientras su interruptor está activo.
+function refreshConditionalRows() {
+  for (const row of form.querySelectorAll("[data-show-if]")) {
+    row.hidden = !measurements[row.dataset.showIf];
+  }
+}
+
+function buildToggleRow(field) {
+  const row = document.createElement("label");
+  row.className = "switch-row";
+  const text = document.createElement("span");
+  text.textContent = field.label;
+  const input = document.createElement("input");
+  input.type = "checkbox";
+  input.checked = Boolean(measurements[field.key]);
+  input.addEventListener("change", () => {
+    measurements[field.key] = input.checked;
+    saveMeasurements();
+    refreshConditionalRows();
+    update();
+  });
+  row.append(text, input);
+  return row;
 }
 
 function buildFieldRow(field) {
+  if (field.type === "toggle") return buildToggleRow(field);
   const row = document.createElement("div");
   row.className = "spec-row";
+  if (field.showIf) row.dataset.showIf = field.showIf;
 
   const label = document.createElement("label");
   label.htmlFor = `f-${field.key}`;
@@ -128,7 +156,9 @@ function update() {
   const side = front.sideMatched
     ? `Costado: delantero ${front.sideLength.toFixed(1)} cm = espalda ${back.sideLength.toFixed(1)} cm (pinza de busto cerrada).`
     : `Costado sin igualar: delantero ${front.sideLength.toFixed(1)} cm / espalda ${back.sideLength.toFixed(1)} cm — revisa pinza de busto o largos de talle.`;
-  const dart = `Pinza de busto: ${front.bustDartDepth.toFixed(1)} cm (talle delantero − talle espalda).`;
+  const dart = measurements.bustDartManual
+    ? `Pinza de busto: ${front.bustDartDepth.toFixed(1)} cm (manual).`
+    : `Pinza de busto: ${front.bustDartDepth.toFixed(1)} cm (talle delantero − talle espalda).`;
   modeCaption.textContent = `${view} ${dart} ${side}`;
 }
 
