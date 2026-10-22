@@ -63,6 +63,11 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
 - **Curvas** (escote, sisa, cadera): Bézier con controles elegidos para pasar
   cerca de las esquinas de construcción; son una interpretación, no un trazado
   idéntico al del artículo. Se ajustan en `bodice.js`.
+- **Sisa:** dos tramos. El fondo sale del bajo sisa perpendicular a la costura
+  de costado y sube hasta tocar la vertical del ancho de pecho/espalda; la
+  subida llega al hombro perpendicular a la línea de hombro. Como delantero y
+  espalda salen perpendiculares a su propio costado, al coser los costados la
+  sisa queda continua (forma de gota), sin pico en el bajo sisa.
 - **Tramo cintura -> cadera:** una sola curva de costado; las líneas de la pinza
   no se proyectan hasta la línea de cadera como curvas separadas. Ancho de cadera
   `cadera/4` para delantero y espalda por igual.

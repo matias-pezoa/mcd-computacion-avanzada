@@ -50,12 +50,31 @@ function neckCurve(A1, A2) {
 }
 
 // Sisa: desde el costado (U) hasta el hombro (S), en el sentido en que el
-// contorno recorre la pieza. Ambos controles se acercan a la esquina de la caja
-// de sisa (más angosta que el costado), el punto guía del "aplomo de sisa".
-function armholeCurve(U, boxCorner, S) {
-  const c1 = P(boxCorner.x, U.y * 0.6);
-  const c2 = P(boxCorner.x * 0.7 + S.x * 0.3, boxCorner.y * 0.3 + S.y * 0.7);
-  return cubic(U, c1, c2, S, { role: "sisa" });
+// contorno recorre la pieza. Dos tramos, como en el trazado clásico:
+//  1. Fondo: sale de U perpendicular a la costura de costado y sube hasta
+//     tocar la vertical del ancho de pecho/espalda (T) con tangente vertical.
+//     Como delantero y espalda salen perpendiculares a su propio costado, al
+//     coser los costados la sisa sigue sin quiebre: la "gota".
+//  2. Subida: de T al hombro, llegando perpendicular a la línea de hombro.
+// `sideNext` es el punto siguiente del costado bajo U (define su dirección).
+function armholeCurve(U, sideNext, boxCorner, S, A1) {
+  const depth = U.x - boxCorner.x; // ancho del fondo de sisa
+  const T = P(boxCorner.x, Math.max(S.y + 2, U.y - depth * 1.1));
+
+  // Normal al costado en U, hacia el interior de la pieza (x decreciente).
+  const side = normalize(sub(sideNext, U));
+  let inward = P(-side.y, side.x);
+  if (inward.x > 0) inward = scale(inward, -1);
+  const k = 0.55;
+  const bottom = cubic(U, add(U, scale(inward, depth * k)), P(T.x, T.y + (U.y - T.y) * k), T, { role: "sisa" });
+
+  // Normal a la línea de hombro en S, hacia abajo.
+  const shoulder = normalize(sub(S, A1));
+  let down = P(-shoulder.y, shoulder.x);
+  if (down.y < 0) down = scale(down, -1);
+  const rise = T.y - S.y;
+  const top = cubic(T, P(T.x, T.y - rise * 0.45), add(S, scale(down, rise * 0.35)), S, { role: "sisa" });
+  return [bottom, top];
 }
 
 // Costado cadera -> cintura.
@@ -215,7 +234,7 @@ function buildPiece(m, side, backSideLength) {
       outline.push(line(dartTip, L1, { role: "pinza-busto" }));
     }
     outline.push(line(L1, U));
-    outline.push(armholeCurve(U, boxBottomCorner, S));
+    outline.push(...armholeCurve(U, L1, boxBottomCorner, S, A1));
     outline.push(line(S, A1));
     outline.push(neckCurve(A1, A2));
 
@@ -231,7 +250,7 @@ function buildPiece(m, side, backSideLength) {
     outline.push(line(Hc, H));
     outline.push(hipCurve(H, W));
     outline.push(line(W, U));
-    outline.push(armholeCurve(U, boxBottomCorner, S));
+    outline.push(...armholeCurve(U, W, boxBottomCorner, S, A1));
     outline.push(line(S, A1));
     outline.push(neckCurve(A1, A2));
 
