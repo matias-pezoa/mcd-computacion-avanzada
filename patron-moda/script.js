@@ -1,10 +1,10 @@
 // Las URLs de los módulos llevan ?v=N para no mezclar archivos viejos del caché
 // (GitHub Pages cachea 10 min). Subir N en todos los imports al cambiar un módulo.
-import { MEASUREMENT_GROUPS, defaultMeasurements } from "./measurements.js?v=2";
-import { buildBodice, mirrorToFullPiece } from "./bodice.js?v=2";
-import { renderBodiceSvg, renderRuler } from "./render.js?v=2";
-import { buildDxf, downloadDxf } from "./dxf.js?v=2";
-import { buildSheet, sheetToSvg, sheetToPdf } from "./sheet.js?v=2";
+import { MEASUREMENT_GROUPS, defaultMeasurements } from "./measurements.js?v=3";
+import { buildBodice, mirrorToFullPiece } from "./bodice.js?v=3";
+import { renderBodiceSvg, renderRuler } from "./render.js?v=3";
+import { buildDxf, downloadDxf } from "./dxf.js?v=3";
+import { buildSheet, sheetToSvg, sheetToPdf } from "./sheet.js?v=3";
 
 // v2: la pinza de espalda pasó a 3 cm y centrada; se descartan medidas guardadas antes.
 const STORAGE_KEY = "patron-moda:measurements:v2";

@@ -77,7 +77,9 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   sisa queda continua (forma de gota), sin pico en el bajo sisa.
 - **Tramo cintura -> cadera:** una sola curva de costado; las líneas de la pinza
   no se proyectan hasta la línea de cadera como curvas separadas. Ancho de cadera
-  `cadera/4` para delantero y espalda por igual.
+  `cadera/4` para delantero y espalda por igual. Cuánto se abomba esa curva se
+  ajusta en "Forma → Curva de cadera" (0% = recta, 100% = máxima; 35% por
+  defecto, ~0,4 cm de separación de la recta con las medidas por defecto).
 
 ## Estado de verificación
 

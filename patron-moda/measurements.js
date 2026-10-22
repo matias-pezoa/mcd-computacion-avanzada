@@ -24,6 +24,15 @@ export const MEASUREMENT_GROUPS = [
     ],
   },
   {
+    id: "forma",
+    label: "Forma",
+    open: true,
+    fields: [
+      // 0 = costado recto de cintura a cadera; 100 = curva más abombada.
+      { key: "hipCurve", label: "Curva de cadera", unit: "%", default: 35, min: 0, max: 100, step: 1 },
+    ],
+  },
+  {
     // Todos los modificadores de pinzas en un solo menú, por pinza.
     id: "pinzas",
     label: "Pinzas",

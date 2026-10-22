@@ -78,8 +78,13 @@ function armholeCurve(U, sideNext, boxCorner, S, A1) {
 }
 
 // Costado cadera -> cintura.
-function hipCurve(H, W) {
-  const c = P(H.x, W.y + (H.y - W.y) * 0.3);
+// `amount` (0..1) es cuánto se abomba: 0 = costado recto (cuerda W->H),
+// 1 = control en el ancho de cadera a 30% de la bajada (curva máxima).
+function hipCurve(H, W, amount = 0.35) {
+  const y = W.y + (H.y - W.y) * 0.3;
+  const onChord = P(W.x + (H.x - W.x) * 0.3, y);
+  const corner = P(H.x, y);
+  const c = add(onChord, scale(sub(corner, onChord), amount));
   return quad(H, c, W, { role: "cadera" });
 }
 
@@ -172,6 +177,8 @@ function buildPiece(m, side, backSideLength) {
   const D = P(0, waistLength);
   const H = P(m.hip / 4, waistLength + m.hipHeight);
   const Hc = P(0, waistLength + m.hipHeight);
+  // Curva de cadera en % (0 = recta, 100 = máxima); ver hipCurve.
+  const hipAmount = (m.hipCurve ?? 35) / 100;
 
   // Pinza de busto (pasos 6-7): muesca sobre el costado, centrada en la altura de busto.
   // Su ancho (abertura sobre el costado) es la diferencia entre talle
@@ -227,7 +234,7 @@ function buildPiece(m, side, backSideLength) {
     outline.push(line(A2, D, { fold: true }));
     outline.push(line(D, Hc, { fold: true }));
     outline.push(line(Hc, H));
-    outline.push(hipCurve(H, W));
+    outline.push(hipCurve(H, W, hipAmount));
     outline.push(line(W, L2));
     if (hasBustDart) {
       outline.push(line(L2, dartTip, { role: "pinza-busto" }));
@@ -242,13 +249,13 @@ function buildPiece(m, side, backSideLength) {
     // apunta al ápice y se despega `dartRelease`, la inferior se proyecta a la cadera.
     const topY = m.bustHeight + m.dartRelease;
     const bottomY = waistLength + dartDown;
-    const x0 = clampDartAxis(m.bustSeparation / 2, dartWidth, waistLength, topY, bottomY, [hipCurve(H, W), line(W, L2)]);
+    const x0 = clampDartAxis(m.bustSeparation / 2, dartWidth, waistLength, topY, bottomY, [hipCurve(H, W, hipAmount), line(W, L2)]);
     darts.push(waistDart("pinza-talle-delantera", x0, waistLength, dartWidth, topY, bottomY));
   } else {
     outline.push(line(A2, D, { fold: true }));
     outline.push(line(D, Hc, { fold: true }));
     outline.push(line(Hc, H));
-    outline.push(hipCurve(H, W));
+    outline.push(hipCurve(H, W, hipAmount));
     outline.push(line(W, U));
     outline.push(...armholeCurve(U, W, boxBottomCorner, S, A1));
     outline.push(line(S, A1));
@@ -259,7 +266,7 @@ function buildPiece(m, side, backSideLength) {
     // doblez ni del costado. Punta superior hacia la escápula.
     const topY = waistLength - m.backDartUpperLength;
     const bottomY = waistLength + dartDown;
-    const x0 = clampDartAxis(W.x / 2 + (m.backDartOffset ?? 0), dartWidth, waistLength, topY, bottomY, [hipCurve(H, W), line(W, U)]);
+    const x0 = clampDartAxis(W.x / 2 + (m.backDartOffset ?? 0), dartWidth, waistLength, topY, bottomY, [hipCurve(H, W, hipAmount), line(W, U)]);
     darts.push(waistDart("pinza-talle-espalda", x0, waistLength, dartWidth, topY, bottomY));
   }
 
