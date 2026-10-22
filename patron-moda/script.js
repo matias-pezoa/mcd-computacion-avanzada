@@ -122,7 +122,7 @@ function update() {
   rulerWrap.innerHTML = renderRuler(Math.ceil(spanCm / 5) * 5, SCALE);
   modeCaption.textContent = mirrorToggle.checked
     ? "Vista: pieza completa (delantero + espalda espejados sobre el doblez)."
-    : "Vista: mitad de pieza — la línea de doblez (lima) va sobre el centro delantero/espalda.";
+    : "Vista: mitad de pieza — la línea de doblez (punteada) va sobre el centro delantero/espalda.";
 }
 
 buildForm();
