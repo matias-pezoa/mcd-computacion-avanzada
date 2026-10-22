@@ -16,7 +16,8 @@ carpeta por HTTP. Con Live Server (VS Code), o con Node:
 npx serve patron-moda
 ```
 
-- Panel izquierdo: medidas del cuerpo y "tabla de patronaje" (ajuste fino,
+- Panel derecho: medidas del cuerpo, menú "Pinzas" (busto, talle delantera y
+  talle espalda: todos los modificadores de pinza) y "tabla de patronaje" (ajuste fino,
   colapsada). El patrón se redibuja en vivo; las medidas quedan guardadas en
   `localStorage`.
 - "Pieza completa" espeja la mitad trazada sobre el doblez (útil para cortar).
@@ -42,8 +43,8 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   `cuello/6 + 2` (delantero) / `2 cm` (espalda) de bajada, bajada de hombro 4 cm,
   ápice de busto a `separación/2` y a la altura de busto, pinza lateral de busto
   a `profundidad/2` sobre y bajo esa altura, con profundidad = talle delantero −
-  talle espalda (sin pinza si el delantero no es más largo). La ficha "Pinza de
-  busto" permite fijarla a mano cuando los talles son iguales por otra causa
+  talle espalda (sin pinza si el delantero no es más largo). El menú "Pinzas"
+  permite fijar la pinza de busto a mano cuando los talles son iguales por otra causa
   (p. ej. espalda curva) aunque haya busto. Despegue de pinzas 2–3 cm del ápice.
 - **Escote:** curva cóncava (scoop), tangente vertical en el hombro y
   horizontal en el centro; el punto de control no es la esquina del trazo.
@@ -55,8 +56,8 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   quede `cintura/4`.
 - **Pinza de espalda:** centrada en la cintura del panel (entre centro espalda y
   costado), 3 cm de ancho por defecto; el panel mide `cintura/4 + ancho de
-  pinza` en la cintura. Ancho y desplazamiento lateral se ajustan en la ficha
-  "Pinza de espalda". Ambas pinzas de talle (delantero y espalda) se mantienen
+  pinza` en la cintura. Ancho y desplazamiento lateral se ajustan en el menú
+  "Pinzas". Ambas pinzas de talle (delantero y espalda) se mantienen
   a 2 cm del doblez y del costado en toda su altura: si el desplazamiento o las
   medidas las acercarían más, el eje se corre hasta ese límite. Su largo hacia la escápula (12 cm) es un supuesto ajustable.
 - **Curvas** (escote, sisa, cadera): Bézier con controles elegidos para pasar

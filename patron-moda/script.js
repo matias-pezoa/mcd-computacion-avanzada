@@ -89,6 +89,12 @@ function buildToggleRow(field) {
 
 function buildFieldRow(field) {
   if (field.type === "toggle") return buildToggleRow(field);
+  if (field.type === "heading") {
+    const heading = document.createElement("h3");
+    heading.className = "field-heading";
+    heading.textContent = field.label;
+    return heading;
+  }
   const row = document.createElement("div");
   row.className = "spec-row";
   if (field.showIf) row.dataset.showIf = field.showIf;

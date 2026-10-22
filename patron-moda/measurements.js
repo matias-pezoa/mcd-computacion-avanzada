@@ -24,24 +24,28 @@ export const MEASUREMENT_GROUPS = [
     ],
   },
   {
-    id: "pinza-espalda",
-    label: "Pinza de espalda",
+    // Todos los modificadores de pinzas en un solo menú, por pinza.
+    id: "pinzas",
+    label: "Pinzas",
     open: true,
     fields: [
-      { key: "backWaistDartWidth", label: "Ancho de pinza", unit: "cm", default: 3, min: 1, max: 6, step: 0.1 },
-      { key: "backDartOffset", label: "Desplazamiento (− centro / + costado)", unit: "cm", default: 0, min: -8, max: 8, step: 0.1 },
-    ],
-  },
-  {
-    id: "pinza-busto",
-    label: "Pinza de busto",
-    open: true,
-    fields: [
+      { type: "heading", label: "Pinza de busto" },
       // Por defecto la pinza de busto = talle delantero − talle espalda. Si los
       // talles son iguales por otra razón (p. ej. espalda curva / cifosis) pero
       // hay busto, se activa una pinza manual que reemplaza ese cálculo.
-      { key: "bustDartManual", type: "toggle", label: "Pinza de busto manual (no derivar de los talles)", default: false },
-      { key: "bustDartManualDepth", label: "Profundidad pinza de busto", unit: "cm", default: 2, min: 0.5, max: 6, step: 0.1, showIf: "bustDartManual" },
+      { key: "bustDartManual", type: "toggle", label: "Manual (no derivar de los talles)", default: false },
+      { key: "bustDartManualDepth", label: "Profundidad", unit: "cm", default: 2, min: 0.5, max: 6, step: 0.1, showIf: "bustDartManual" },
+      { key: "dartRelease", label: "Despegue del ápice (también pinza de talle del.)", unit: "cm", default: 2.5, min: 1, max: 4, step: 0.1 },
+
+      { type: "heading", label: "Pinza de talle delantera" },
+      { key: "frontWaistDartWidth", label: "Ancho", unit: "cm", default: 2, min: 1, max: 4, step: 0.2 },
+      { key: "frontWaistDartLength", label: "Largo hacia cadera", unit: "cm", default: 9.5, min: 7, max: 12, step: 0.5 },
+
+      { type: "heading", label: "Pinza de talle espalda" },
+      { key: "backWaistDartWidth", label: "Ancho", unit: "cm", default: 3, min: 1, max: 6, step: 0.1 },
+      { key: "backDartOffset", label: "Desplazamiento (− centro / + costado)", unit: "cm", default: 0, min: -8, max: 8, step: 0.1 },
+      { key: "backDartUpperLength", label: "Largo hacia escápula", unit: "cm", default: 12, min: 8, max: 16, step: 0.5 },
+      { key: "backWaistDartLength", label: "Largo hacia cadera", unit: "cm", default: 11.5, min: 9, max: 14, step: 0.5 },
     ],
   },
   {
@@ -52,11 +56,6 @@ export const MEASUREMENT_GROUPS = [
       { key: "backArmholeDrop", label: "Bajada de sisa espalda", unit: "cm", default: 19, min: 14, max: 26, step: 0.5 },
       { key: "bustHeight", label: "Altura de busto", unit: "cm", default: 25, min: 18, max: 34, step: 0.5 },
       { key: "hipHeight", label: "Altura de cadera", unit: "cm", default: 20, min: 14, max: 28, step: 0.5 },
-      { key: "frontWaistDartWidth", label: "Ancho pinza talle delantero", unit: "cm", default: 2, min: 1, max: 4, step: 0.2 },
-      { key: "frontWaistDartLength", label: "Pinza talle delantero: largo hacia cadera", unit: "cm", default: 9.5, min: 7, max: 12, step: 0.5 },
-      { key: "backWaistDartLength", label: "Pinza talle espalda: largo hacia cadera", unit: "cm", default: 11.5, min: 9, max: 14, step: 0.5 },
-      { key: "backDartUpperLength", label: "Pinza talle espalda: largo hacia escápula", unit: "cm", default: 12, min: 8, max: 16, step: 0.5 },
-      { key: "dartRelease", label: "Despegue de pinzas del ápice", unit: "cm", default: 2.5, min: 1, max: 4, step: 0.1 },
       { key: "backNeckDrop", label: "Bajada de cuello espalda", unit: "cm", default: 2, min: 1, max: 4, step: 0.2 },
       { key: "shoulderDrop", label: "Bajada de hombro", unit: "cm", default: 4, min: 2, max: 6, step: 0.2 },
       { key: "neckHorizontalConst", label: "Constante ancho de cuello (+)", unit: "cm", default: 0.5, min: 0, max: 2, step: 0.1 },
@@ -68,7 +67,7 @@ export const MEASUREMENT_GROUPS = [
 export function defaultMeasurements() {
   const out = {};
   for (const group of MEASUREMENT_GROUPS) {
-    for (const field of group.fields) out[field.key] = field.default;
+    for (const field of group.fields) if (field.key) out[field.key] = field.default;
   }
   return out;
 }
