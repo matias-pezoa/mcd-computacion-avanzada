@@ -50,9 +50,11 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   9–10 cm hacia la cadera. Espalda: 11–12 cm hacia la cadera. El ancho del panel
   en la cintura es `cintura/4 + ancho de pinza`, de modo que cosida la pinza
   quede `cintura/4`.
-- **Supuestos que el artículo no fija** (todos ajustables en la ficha): posición
-  de la pinza de espalda (centrada bajo el ancho de espalda), ancho de esa pinza
-  (2,5 cm) y su largo hacia la escápula (12 cm).
+- **Pinza de espalda:** centrada en la cintura del panel (entre centro espalda y
+  costado), 3 cm de ancho por defecto; el panel mide `cintura/4 + ancho de
+  pinza` en la cintura. Ancho y desplazamiento lateral se ajustan en la ficha
+  "Pinza de espalda" (el desplazamiento se limita para que la pinza no salga
+  del panel). Su largo hacia la escápula (12 cm) es un supuesto ajustable.
 - **Curvas** (escote, sisa, cadera): Bézier con controles elegidos para pasar
   cerca de las esquinas de construcción; son una interpretación, no un trazado
   idéntico al del artículo. Se ajustan en `bodice.js`.

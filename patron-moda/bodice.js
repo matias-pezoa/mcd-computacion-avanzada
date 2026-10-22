@@ -155,8 +155,12 @@ function buildPiece(m, side) {
     outline.push(line(S, A1));
     outline.push(neckCurve(A1, A2));
 
-    // Centrada bajo el ancho de espalda; punta superior a la altura de la escápula.
-    const x0 = m.backWidth / 2;
+    // Centrada en la cintura del panel (entre CB y el costado W), desplazable
+    // con `backDartOffset`; el desplazamiento se limita para que la pinza no
+    // se salga del panel. Punta superior hacia la escápula.
+    const center = W.x / 2;
+    const maxOffset = Math.max(0, center - dartWidth / 2 - 0.5);
+    const x0 = center + Math.min(maxOffset, Math.max(-maxOffset, m.backDartOffset ?? 0));
     darts.push(waistDart("pinza-talle-espalda", x0, waistLength, dartWidth, waistLength - m.backDartUpperLength, waistLength + dartDown));
   }
 

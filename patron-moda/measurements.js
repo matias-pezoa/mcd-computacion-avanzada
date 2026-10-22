@@ -24,6 +24,15 @@ export const MEASUREMENT_GROUPS = [
     ],
   },
   {
+    id: "pinza-espalda",
+    label: "Pinza de espalda",
+    open: true,
+    fields: [
+      { key: "backWaistDartWidth", label: "Ancho de pinza", unit: "cm", default: 3, min: 1, max: 6, step: 0.1 },
+      { key: "backDartOffset", label: "Desplazamiento (− centro / + costado)", unit: "cm", default: 0, min: -8, max: 8, step: 0.1 },
+    ],
+  },
+  {
     id: "tabla",
     label: "Tabla de patronaje (ajuste fino)",
     open: false,
@@ -35,7 +44,6 @@ export const MEASUREMENT_GROUPS = [
       { key: "bustDartDepth", label: "Profundidad pinza de busto", unit: "cm", default: 3, min: 1, max: 6, step: 0.2 },
       { key: "frontWaistDartWidth", label: "Ancho pinza talle delantero", unit: "cm", default: 2, min: 1, max: 4, step: 0.2 },
       { key: "frontWaistDartLength", label: "Pinza talle delantero: largo hacia cadera", unit: "cm", default: 9.5, min: 7, max: 12, step: 0.5 },
-      { key: "backWaistDartWidth", label: "Ancho pinza talle espalda", unit: "cm", default: 2.5, min: 1, max: 5, step: 0.2 },
       { key: "backWaistDartLength", label: "Pinza talle espalda: largo hacia cadera", unit: "cm", default: 11.5, min: 9, max: 14, step: 0.5 },
       { key: "backDartUpperLength", label: "Pinza talle espalda: largo hacia escápula", unit: "cm", default: 12, min: 8, max: 16, step: 0.5 },
       { key: "dartRelease", label: "Despegue de pinzas del ápice", unit: "cm", default: 2.5, min: 1, max: 4, step: 0.1 },

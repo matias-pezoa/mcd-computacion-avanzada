@@ -3,7 +3,8 @@ import { buildBodice, mirrorToFullPiece } from "./bodice.js";
 import { renderBodiceSvg, renderRuler } from "./render.js";
 import { buildDxf, downloadDxf } from "./dxf.js";
 
-const STORAGE_KEY = "patron-moda:measurements";
+// v2: la pinza de espalda pasó a 3 cm y centrada; se descartan medidas guardadas antes.
+const STORAGE_KEY = "patron-moda:measurements:v2";
 const SCALE = 6; // px por cm
 
 const form = document.getElementById("measurement-form");
