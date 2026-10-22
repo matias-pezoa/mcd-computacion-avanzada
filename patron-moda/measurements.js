@@ -40,7 +40,6 @@ export const MEASUREMENT_GROUPS = [
       { key: "backArmholeDrop", label: "Bajada de sisa espalda", unit: "cm", default: 19, min: 14, max: 26, step: 0.5 },
       { key: "bustHeight", label: "Altura de busto", unit: "cm", default: 25, min: 18, max: 34, step: 0.5 },
       { key: "hipHeight", label: "Altura de cadera", unit: "cm", default: 20, min: 14, max: 28, step: 0.5 },
-      { key: "bustDartDepth", label: "Profundidad pinza de busto", unit: "cm", default: 3, min: 1, max: 6, step: 0.2 },
       { key: "frontWaistDartWidth", label: "Ancho pinza talle delantero", unit: "cm", default: 2, min: 1, max: 4, step: 0.2 },
       { key: "frontWaistDartLength", label: "Pinza talle delantero: largo hacia cadera", unit: "cm", default: 9.5, min: 7, max: 12, step: 0.5 },
       { key: "backWaistDartLength", label: "Pinza talle espalda: largo hacia cadera", unit: "cm", default: 11.5, min: 9, max: 14, step: 0.5 },

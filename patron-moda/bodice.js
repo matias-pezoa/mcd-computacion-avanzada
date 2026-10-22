@@ -155,8 +155,13 @@ function buildPiece(m, side, backSideLength) {
   const Hc = P(0, waistLength + m.hipHeight);
 
   // Pinza de busto (pasos 6-7): muesca sobre el costado, centrada en la altura de busto.
-  const L1 = P(m.bust / 4, m.bustHeight - m.bustDartDepth / 2);
-  const L2 = P(m.bust / 4, m.bustHeight + m.bustDartDepth / 2);
+  // Su ancho (abertura sobre el costado) es la diferencia entre talle
+  // delantero y talle espalda: es el largo extra que el delantero necesita
+  // para cubrir el busto. Si el delantero no es más largo, no hay pinza.
+  const bustDartDepth = Math.max(0, m.frontWaistLength - m.backWaistLength);
+  const hasBustDart = bustDartDepth >= 0.1;
+  const L1 = P(m.bust / 4, m.bustHeight - bustDartDepth / 2);
+  const L2 = P(m.bust / 4, m.bustHeight + bustDartDepth / 2);
 
   // Bajo sisa (U). Espalda: bajada de sisa de la tabla. Delantero: se ubica
   // para que el costado, con la pinza de busto cerrada (W->L2 + L1->U), mida
@@ -201,8 +206,10 @@ function buildPiece(m, side, backSideLength) {
     outline.push(line(Hc, H));
     outline.push(hipCurve(H, W));
     outline.push(line(W, L2));
-    outline.push(line(L2, dartTip, { role: "pinza-busto" }));
-    outline.push(line(dartTip, L1, { role: "pinza-busto" }));
+    if (hasBustDart) {
+      outline.push(line(L2, dartTip, { role: "pinza-busto" }));
+      outline.push(line(dartTip, L1, { role: "pinza-busto" }));
+    }
     outline.push(line(L1, U));
     outline.push(armholeCurve(U, boxBottomCorner, S));
     outline.push(line(S, A1));
@@ -241,6 +248,7 @@ function buildPiece(m, side, backSideLength) {
     guides,
     points,
     sideLength,
+    bustDartDepth: isFront ? bustDartDepth : 0,
     sideMatched,
     bounds: bounds(outline),
   };

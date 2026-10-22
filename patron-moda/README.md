@@ -41,7 +41,8 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
   (ancho de pecho/2 o de espalda/2), cuello `cuello/6 + 0,5` de ancho y
   `cuello/6 + 2` (delantero) / `2 cm` (espalda) de bajada, bajada de hombro 4 cm,
   ápice de busto a `separación/2` y a la altura de busto, pinza lateral de busto
-  a `profundidad/2` sobre y bajo esa altura, despegue de pinzas 2–3 cm del ápice.
+  a `profundidad/2` sobre y bajo esa altura, con profundidad = talle delantero −
+  talle espalda (sin pinza si el delantero no es más largo), despegue de pinzas 2–3 cm del ápice.
 - **Escote:** curva cóncava (scoop), tangente vertical en el hombro y
   horizontal en el centro; el punto de control no es la esquina del trazo.
 - **Pinza de talle:** diamante cerrado, ancho máximo sobre la cintura (2 cm en

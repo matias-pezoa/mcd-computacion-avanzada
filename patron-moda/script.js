@@ -128,7 +128,8 @@ function update() {
   const side = front.sideMatched
     ? `Costado: delantero ${front.sideLength.toFixed(1)} cm = espalda ${back.sideLength.toFixed(1)} cm (pinza de busto cerrada).`
     : `Costado sin igualar: delantero ${front.sideLength.toFixed(1)} cm / espalda ${back.sideLength.toFixed(1)} cm — revisa pinza de busto o largos de talle.`;
-  modeCaption.textContent = `${view} ${side}`;
+  const dart = `Pinza de busto: ${front.bustDartDepth.toFixed(1)} cm (talle delantero − talle espalda).`;
+  modeCaption.textContent = `${view} ${dart} ${side}`;
 }
 
 buildForm();
