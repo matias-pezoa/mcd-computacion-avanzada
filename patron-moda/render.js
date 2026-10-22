@@ -46,17 +46,26 @@ export function renderBodiceSvg({ front, back }, { scale = 6, margin = 24, gap =
   const frontH = fb.height * scale;
   const backW = bb.width * scale;
   const backH = bb.height * scale;
-  const height = Math.max(frontH, backH) + margin * 2 + 16;
   const width = frontW + backW + gap + margin * 2;
 
-  // Se resta minX/minY escalado: una pieza espejada tiene x negativa.
+  // Ambas piezas se alinean por la línea de cintura (y = W.y de cada una):
+  // la cintura queda a la misma altura en pantalla aunque los talles difieran.
+  const frontWaist = front.points.W.y;
+  const backWaist = back.points.W.y;
+  const above = Math.max(frontWaist - fb.minY, backWaist - bb.minY) * scale;
+  const below = Math.max(fb.maxY - frontWaist, bb.maxY - backWaist) * scale;
+  const waistLineY = margin + 16 + above;
+  const height = waistLineY + below + margin;
+
+  // Se resta minX escalado: una pieza espejada tiene x negativa.
   const frontX = margin - fb.minX * scale;
-  const frontY = margin - fb.minY * scale + 16;
+  const frontY = waistLineY - frontWaist * scale;
   const backX = margin + frontW + gap - bb.minX * scale;
-  const backY = margin - bb.minY * scale + 16;
+  const backY = waistLineY - backWaist * scale;
 
   return `
 <svg viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">
+  <line class="pattern-waistline" x1="0" y1="${waistLineY}" x2="${width}" y2="${waistLineY}" />
   <g transform="translate(${frontX}, ${frontY})">
     <text class="pattern-label" x="${fb.minX * scale}" y="-8">${shortLabel(front.label)}</text>
     ${pieceToSvgGroup(front, scale)}
