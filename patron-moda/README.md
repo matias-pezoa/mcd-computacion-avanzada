@@ -53,8 +53,9 @@ sin coordenadas exactas ni imágenes anotadas. Qué es literal y qué se asumió
 - **Pinza de espalda:** centrada en la cintura del panel (entre centro espalda y
   costado), 3 cm de ancho por defecto; el panel mide `cintura/4 + ancho de
   pinza` en la cintura. Ancho y desplazamiento lateral se ajustan en la ficha
-  "Pinza de espalda" (el desplazamiento se limita para que la pinza no salga
-  del panel). Su largo hacia la escápula (12 cm) es un supuesto ajustable.
+  "Pinza de espalda". Ambas pinzas de talle (delantero y espalda) se mantienen
+  a 2 cm del doblez y del costado en toda su altura: si el desplazamiento o las
+  medidas las acercarían más, el eje se corre hasta ese límite. Su largo hacia la escápula (12 cm) es un supuesto ajustable.
 - **Curvas** (escote, sisa, cadera): Bézier con controles elegidos para pasar
   cerca de las esquinas de construcción; son una interpretación, no un trazado
   idéntico al del artículo. Se ajustan en `bodice.js`.

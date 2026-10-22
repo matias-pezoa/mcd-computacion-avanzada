@@ -80,6 +80,50 @@ function waistDart(id, x0, waistY, width, topY, bottomY) {
   };
 }
 
+// Distancia mínima entre la pinza y el centro (doblez) o el costado.
+const DART_CLEARANCE = 2;
+
+function pointOnSegment(seg, t) {
+  const u = 1 - t;
+  if (seg.type === "line") return add(scale(seg.p0, u), scale(seg.p1, t));
+  if (seg.type === "quad") return add(add(scale(seg.p0, u * u), scale(seg.c, 2 * u * t)), scale(seg.p1, t * t));
+  return add(
+    add(scale(seg.p0, u * u * u), scale(seg.c1, 3 * u * u * t)),
+    add(scale(seg.c2, 3 * u * t * t), scale(seg.p1, t * t * t))
+  );
+}
+
+// x del costado a una altura y, muestreando los tramos de costado dados.
+// Fuera del rango de los tramos se usa el extremo más cercano.
+function sideXAt(sideSegs, y) {
+  const pts = [];
+  for (const seg of sideSegs) for (let i = 0; i <= 40; i++) pts.push(pointOnSegment(seg, i / 40));
+  pts.sort((a, b) => a.y - b.y);
+  if (y <= pts[0].y) return pts[0].x;
+  if (y >= pts[pts.length - 1].y) return pts[pts.length - 1].x;
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i];
+    if (y <= b.y) return b.y === a.y ? Math.min(a.x, b.x) : a.x + ((y - a.y) / (b.y - a.y)) * (b.x - a.x);
+  }
+  return pts[pts.length - 1].x;
+}
+
+// Lleva el eje de la pinza (x0) al rango donde todo el diamante queda a
+// DART_CLEARANCE del doblez y del costado, revisando toda su altura (el
+// costado no es vertical: con cintura ancha se cierra hacia la sisa).
+function clampDartAxis(x0, width, waistY, topY, bottomY, sideSegs) {
+  const minX = DART_CLEARANCE + width / 2;
+  let maxX = Infinity;
+  for (let i = 0; i <= 60; i++) {
+    const y = topY + ((bottomY - topY) * i) / 60;
+    const reach = y <= waistY ? (y - topY) / (waistY - topY) : (bottomY - y) / (bottomY - waistY);
+    maxX = Math.min(maxX, sideXAt(sideSegs, y) - DART_CLEARANCE - (width / 2) * reach);
+  }
+  // Si el panel es demasiado angosto, la pinza queda al medio del espacio disponible.
+  if (maxX < minX) return (minX + maxX) / 2;
+  return Math.min(maxX, Math.max(minX, x0));
+}
+
 /**
  * @param {object} m medidas
  * @param {"front"|"back"} side
@@ -143,8 +187,10 @@ function buildPiece(m, side) {
 
     // Paso 8: pinza de talle sobre la vertical del busto; la punta superior
     // apunta al ápice y se despega `dartRelease`, la inferior se proyecta a la cadera.
-    const x0 = m.bustSeparation / 2;
-    darts.push(waistDart("pinza-talle-delantera", x0, waistLength, dartWidth, m.bustHeight + m.dartRelease, waistLength + dartDown));
+    const topY = m.bustHeight + m.dartRelease;
+    const bottomY = waistLength + dartDown;
+    const x0 = clampDartAxis(m.bustSeparation / 2, dartWidth, waistLength, topY, bottomY, [hipCurve(H, W), line(W, L2)]);
+    darts.push(waistDart("pinza-talle-delantera", x0, waistLength, dartWidth, topY, bottomY));
   } else {
     outline.push(line(A2, D, { fold: true }));
     outline.push(line(D, Hc, { fold: true }));
@@ -156,12 +202,12 @@ function buildPiece(m, side) {
     outline.push(neckCurve(A1, A2));
 
     // Centrada en la cintura del panel (entre CB y el costado W), desplazable
-    // con `backDartOffset`; el desplazamiento se limita para que la pinza no
-    // se salga del panel. Punta superior hacia la escápula.
-    const center = W.x / 2;
-    const maxOffset = Math.max(0, center - dartWidth / 2 - 0.5);
-    const x0 = center + Math.min(maxOffset, Math.max(-maxOffset, m.backDartOffset ?? 0));
-    darts.push(waistDart("pinza-talle-espalda", x0, waistLength, dartWidth, waistLength - m.backDartUpperLength, waistLength + dartDown));
+    // con `backDartOffset`; nunca se acerca a menos de DART_CLEARANCE del
+    // doblez ni del costado. Punta superior hacia la escápula.
+    const topY = waistLength - m.backDartUpperLength;
+    const bottomY = waistLength + dartDown;
+    const x0 = clampDartAxis(W.x / 2 + (m.backDartOffset ?? 0), dartWidth, waistLength, topY, bottomY, [hipCurve(H, W), line(W, U)]);
+    darts.push(waistDart("pinza-talle-espalda", x0, waistLength, dartWidth, topY, bottomY));
   }
 
   return {
